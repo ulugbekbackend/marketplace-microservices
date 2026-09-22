@@ -28,3 +28,20 @@
     pythonpath = ["."]
     testpaths = ["tests"]
     addopts = "-q"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unreachable = true
+plugins = ["mypy_django_plugin.main", "pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+disallow_untyped_defs = false
+
+[[tool.mypy.overrides]]
+module = ["decouple", "drf_spectacular.*"]
+ignore_missing_imports = true
+
+[tool.django-stubs]
+django_settings_module = "config.settings"

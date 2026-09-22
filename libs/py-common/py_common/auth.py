@@ -19,6 +19,11 @@ class CurrentUser:
     seller_id: UUID | None = None
 
     @property
+    def is_authenticated(self) -> bool:
+        """Framework permission checks (DRF ``IsAuthenticated``) read this attribute."""
+        return True
+
+    @property
     def is_seller(self) -> bool:
         return self.role is UserRole.SELLER
 
