@@ -43,6 +43,12 @@ seed: ## Load demo data
 reindex: ## Rebuild the search index from the catalog
 	$(COMPOSE) exec -T search python -m app.reindex
 
+# Tests run on the host against the dev stack (make up exposes these ports locally).
+test test-libs $(addprefix test-,$(PY_SERVICES)): export POSTGRES_HOST = localhost
+test test-libs $(addprefix test-,$(PY_SERVICES)): export REDIS_URL = redis://localhost:6379/0
+test test-libs $(addprefix test-,$(PY_SERVICES)): export REDIS_HOST = localhost
+test test-libs $(addprefix test-,$(PY_SERVICES)): export RABBITMQ_HOST = localhost
+
 test: ## Run every Python test suite (shared libs + each service)
 	uv run pytest libs
 	@for s in $(PY_SERVICES); do echo "== $$s"; (cd services/$$s && uv run --project . pytest) || exit 1; done
