@@ -23,4 +23,4 @@ def test_readiness_reports_dependencies(client: Client) -> None:
     response = client.get("/health/ready")
 
     assert response.status_code in (200, 503)
-    assert "postgres" in response.json()["checks"]
+    assert {"postgres", "redis"} <= set(response.json()["checks"])
