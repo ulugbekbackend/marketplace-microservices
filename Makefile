@@ -1,4 +1,7 @@
 SHELL := /bin/sh
+-include .env
+HOST_POSTGRES_PORT ?= 5432
+HOST_REDIS_PORT ?= 6379
 COMPOSE := docker compose -f infra/docker-compose.yml --env-file .env
 PY_SERVICES := auth catalog order cart search payment notification
 
@@ -44,9 +47,11 @@ reindex: ## Rebuild the search index from the catalog
 	$(COMPOSE) exec -T search python -m app.reindex
 
 # Tests run on the host against the dev stack (make up exposes these ports locally).
-test test-libs $(addprefix test-,$(PY_SERVICES)): export POSTGRES_HOST = localhost
-test test-libs $(addprefix test-,$(PY_SERVICES)): export REDIS_URL = redis://localhost:6379/0
-test test-libs $(addprefix test-,$(PY_SERVICES)): export REDIS_HOST = localhost
+test test-libs $(addprefix test-,$(PY_SERVICES)): export POSTGRES_HOST = 127.0.0.1
+test test-libs $(addprefix test-,$(PY_SERVICES)): export POSTGRES_PORT = $(HOST_POSTGRES_PORT)
+test test-libs $(addprefix test-,$(PY_SERVICES)): export REDIS_URL = redis://127.0.0.1:$(HOST_REDIS_PORT)/0
+test test-libs $(addprefix test-,$(PY_SERVICES)): export REDIS_HOST = 127.0.0.1
+test test-libs $(addprefix test-,$(PY_SERVICES)): export REDIS_PORT = $(HOST_REDIS_PORT)
 test test-libs $(addprefix test-,$(PY_SERVICES)): export RABBITMQ_HOST = localhost
 
 test: ## Run every Python test suite (shared libs + each service)

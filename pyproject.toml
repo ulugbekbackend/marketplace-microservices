@@ -31,6 +31,7 @@ py-common = { workspace = true }
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+extend-exclude = ["**/migrations/*"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "C4", "DTZ", "RUF"]
