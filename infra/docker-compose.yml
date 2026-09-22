@@ -191,6 +191,8 @@ services:
     build:
       <<: *python-build
       dockerfile: services/auth/Dockerfile
+    volumes:
+      - ./secrets:/run/secrets:ro
     depends_on:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
@@ -222,6 +224,21 @@ services:
       - traefik.http.routers.catalog.rule=Host(`api.localhost`) && PathPrefix(`/api/catalog`)
       - traefik.http.routers.catalog.middlewares=cors@file
       - traefik.http.services.catalog.loadbalancer.server.port=8000
+
+  catalog-worker:
+    <<: *service-env
+    build:
+      <<: *python-build
+      dockerfile: services/catalog/Dockerfile
+    command: ["celery", "-A", "config", "worker", "--loglevel=INFO", "--concurrency=2"]
+    depends_on:
+      catalog: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A config inspect ping --timeout 5 | grep -q pong"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
 
   order:
     <<: *service-env

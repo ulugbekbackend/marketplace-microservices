@@ -4,15 +4,21 @@ PY_SERVICES := auth catalog order cart search payment notification
 
 .DEFAULT_GOAL := help
 .PHONY: help up up-full down logs ps build migrate seed reindex \
-        test test-libs lint fmt typecheck gen-rabbit clean
+        test test-libs lint fmt typecheck gen-rabbit keys clean
 
 help: ## Show available targets
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | sort | awk -F':.*?## ' '{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
 
-up: ## Start the stack (infrastructure + services)
+keys: ## Create the RS256 key pair auth signs tokens with (kept out of git)
+	@mkdir -p infra/secrets
+	@test -f infra/secrets/jwt_private.pem || openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out infra/secrets/jwt_private.pem
+	@openssl rsa -in infra/secrets/jwt_private.pem -pubout -out infra/secrets/jwt_public.pem 2>/dev/null
+	@echo "keys ready in infra/secrets/"
+
+up: keys ## Start the stack (infrastructure + services)
 	$(COMPOSE) up -d --build
 
-up-full: ## Start everything including search and monitoring profiles
+up-full: keys ## Start everything including search and monitoring profiles
 	$(COMPOSE) --profile full --profile search --profile monitoring up -d --build
 
 down: ## Stop the stack and remove containers
@@ -57,7 +63,7 @@ fmt: ## Format the code
 
 typecheck: ## Type check with mypy
 	uv run mypy libs
-	@for s in $(PY_SERVICES); do echo "== $$s"; uv run mypy services/$$s || exit 1; done
+	@for s in $(PY_SERVICES); do echo "== $$s"; (cd services/$$s && uv run --project . mypy .) || exit 1; done
 
 gen-rabbit: ## Regenerate the broker topology from the contracts
 	uv run python -m contracts.topology > infra/rabbitmq/definitions.json
