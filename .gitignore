@@ -1,0 +1,138 @@
+# =========================================================
+# Local-only
+# =========================================================
+docs/
+CLAUDE.local.md
+PROMPT.md
+.claude/settings.local.json
+
+# =========================================================
+# Dev environment (local tools, caches, dev-only configs)
+# =========================================================
+.tools/
+.editorconfig
+.pre-commit-config.yaml
+.cache/
+docker-compose.override.yml
+**/docker-compose.override.yml
+*.local.yml
+*.local.yaml
+*.local.json
+*.local.toml
+*.local
+.npmrc
+.pnpmrc
+.python-version
+.tool-versions
+.envrc
+.direnv/
+infra/traefik/certs/
+infra/**/*.dev.*
+**/local_settings.py
+
+# =========================================================
+# Secrets
+# =========================================================
+.env
+.env.*
+!.env.example
+*.env
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+secrets/
+**/keys/
+jwt_private*
+jwt_public*
+
+# =========================================================
+# Python
+# =========================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+env/
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+.uv-cache/
+
+# Tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.dmypy.json
+.hypothesis/
+.tox/
+.nox/
+
+# Coverage
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+junit*.xml
+
+# Django
+*.log
+*.sqlite3
+db.sqlite3
+media/
+staticfiles/
+celerybeat-schedule*
+celerybeat.pid
+
+# =========================================================
+# Node / Frontend (pnpm)
+# =========================================================
+node_modules/
+.pnpm-store/
+.pnpm-debug.log*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+dist/
+dist-ssr/
+.vite/
+*.tsbuildinfo
+.eslintcache
+coverage/
+
+# Playwright
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
+# =========================================================
+# Load tests (k6) raw output
+# =========================================================
+tests/load/results/
+*.k6.json
+
+# =========================================================
+# Docker / infra local data
+# =========================================================
+.data/
+infra/**/data/
+docker-compose.local.yml
+
+# =========================================================
+# IDE / OS
+# =========================================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
