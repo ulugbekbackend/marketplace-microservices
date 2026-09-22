@@ -1,33 +1,36 @@
-    [project]
-    name = "auth-service"
-    version = "0.1.0"
-    description = "Auth service"
-    requires-python = ">=3.12,<3.13"
-    dependencies = [
-        "django==5.2.17",
-"djangorestframework==3.18.1",
-"drf-spectacular==0.30.0",
-"psycopg[binary]==3.3.6",
-"python-decouple==3.8",
-"gunicorn==26.2.0",
-"prometheus-client==0.26.0",
-"py-common",
-    ]
+[project]
+name = "auth-service"
+version = "0.1.0"
+description = "Auth service"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "django==5.2.17",
+    "djangorestframework==3.18.1",
+    "drf-spectacular==0.30.0",
+    "psycopg[binary]==3.3.6",
+    "python-decouple==3.8",
+    "gunicorn==26.2.0",
+    "prometheus-client==0.26.0",
+    "djangorestframework-simplejwt[crypto]==5.5.1",
+    "phonenumbers==9.0.39",
+    "redis==8.1.0",
+    "py-common[drf]",
+]
 
-    [dependency-groups]
-    dev = ["pytest==9.1.1", "pytest-django==4.14.0"]
+[dependency-groups]
+dev = ["pytest==9.1.1", "pytest-django==4.14.0", "factory-boy==3.3.3", "fakeredis==2.38.0", "pytest-cov==7.1.0"]
 
-    [tool.uv]
-    package = false
+[tool.uv]
+package = false
 
-    [tool.uv.sources]
-    py-common = { workspace = true }
+[tool.uv.sources]
+py-common = { workspace = true }
 
-    [tool.pytest.ini_options]
-    DJANGO_SETTINGS_MODULE = "config.settings"
-    pythonpath = ["."]
-    testpaths = ["tests"]
-    addopts = "-q"
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings"
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-q"
 
 [tool.mypy]
 python_version = "3.12"
