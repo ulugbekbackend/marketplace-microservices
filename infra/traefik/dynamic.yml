@@ -1,0 +1,47 @@
+# Middlewares shared by every router.
+http:
+  middlewares:
+    # Identity is decided by the auth service only: whatever a client sends is dropped.
+    strip-identity:
+      headers:
+        customRequestHeaders:
+          X-User-Id: ""
+          X-User-Role: ""
+          X-Seller-Id: ""
+
+    # Verified identity, required.
+    jwt:
+      forwardAuth:
+        address: "http://auth:8000/api/auth/verify/"
+        authResponseHeaders:
+          - X-User-Id
+          - X-User-Role
+          - X-Seller-Id
+
+    # Verified identity when a token is present, anonymous otherwise (guest cart).
+    jwt-optional:
+      forwardAuth:
+        address: "http://auth:8000/api/auth/verify/?optional=1"
+        authResponseHeaders:
+          - X-User-Id
+          - X-User-Role
+          - X-Seller-Id
+
+    otp-ratelimit:
+      rateLimit:
+        average: 5
+        period: 1m
+        burst: 5
+        sourceCriterion:
+          ipStrategy:
+            depth: 0
+
+    cors:
+      headers:
+        accessControlAllowOriginList:
+          - "http://shop.localhost"
+          - "http://seller.localhost"
+        accessControlAllowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"]
+        accessControlAllowHeaders: ["Authorization", "Content-Type", "Idempotency-Key"]
+        accessControlAllowCredentials: true
+        accessControlMaxAge: 600

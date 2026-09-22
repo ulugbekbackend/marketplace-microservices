@@ -1,0 +1,14 @@
+# Deny everything, then allow only what images are built from.
+*
+!libs/
+!services/
+!pyproject.toml
+!uv.lock
+
+**/__pycache__/
+**/*.pyc
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/node_modules/
+**/.venv/

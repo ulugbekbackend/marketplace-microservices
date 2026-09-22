@@ -1,0 +1,14 @@
+[project]
+name = "contracts"
+version = "0.1.0"
+description = "Shared event schemas, enums and constants for the marketplace services"
+requires-python = ">=3.12,<3.13"
+dependencies = ["pydantic==2.13.5"]
+
+[build-system]
+requires = ["hatchling==1.32.4"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["contracts"]
+artifacts = ["contracts/py.typed"]

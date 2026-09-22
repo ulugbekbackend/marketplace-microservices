@@ -1,0 +1,29 @@
+# Static configuration. Routers and middlewares come from docker labels and dynamic.yml.
+entryPoints:
+  web:
+    address: ":80"
+    http:
+      middlewares:
+        - strip-identity@file
+
+providers:
+  docker:
+    exposedByDefault: false
+    network: marketplace_edge
+    watch: true
+  file:
+    filename: /etc/traefik/dynamic.yml
+    watch: true
+
+api:
+  dashboard: true
+
+# Enables `traefik healthcheck`, used by the container healthcheck.
+ping:
+  entryPoint: web
+
+log:
+  level: INFO
+
+accessLog:
+  format: json

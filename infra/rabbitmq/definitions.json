@@ -1,0 +1,419 @@
+{
+  "bindings": [
+    {
+      "arguments": {},
+      "destination": "catalog.q",
+      "destination_type": "queue",
+      "routing_key": "order.created",
+      "source": "marketplace.events",
+      "vhost": "/"
+    },
+    {
+      "arguments": {},
+      "destination": "catalog.q",
+      "destination_type": "queue",
+      "routing_key": "order.paid",
+      "source": "marketplace.events",
+      "vhost": "/"
+    },
+    {
+      "arguments": {},
+      "destination": "catalog.q",
+      "destination_type": "queue",
+      "routing_key": "order.expired",
+      "source": "marketplace.events",
+      "vhost": "/"
+    },
+    {
+      "arguments": {},
+      "destination": "catalog.q",
+      "destination_type": "queue",
+      "routing_key": "order.cancelled",
+      "source": "marketplace.events",
+      "vhost": "/"
+    },
+    {
+      "arguments": {},
+      "destination": "catalog.q",
+      "destination_type": "queue",
+      "routing_key": "seller.approved",
+      "source": "marketplace.events",
+      "vhost": "/"
+    },
+    {
+      "arguments": {},
+      "destination": "catalog.q",
+      "destination_type": "queue",
+      "routing_key": "catalog.q",
+      "source": "marketplace.retry",
+      "vhost": "/"
+    },
+    {
+      "arguments": {},
+      "destination": "catalog.q.dlq",
+      "destination_type": "queue",
+      "routing_key": "catalog.q.dlq",
+      "source": "marketplace.retry",
+      "vhost": "/"
+    },
+    {
+      "arguments": {},
+      "destination": "order.q",
+      "destination_type": "queue",
+      "routing_key": "stock.reserved",
+      "source": "marketplace.events",
+      "vhost": "/"
+    },
+    {
+      "arguments": {},
+      "destination": "order.q",
+      "destination_type": "queue",
+      "routing_key": "stock.failed",
+      "source": "marketplace.events",
+      "vhost": "/"
+    },
+    {
+      "arguments": {},
+      "destination": "order.q",
+      "destination_type": "queue",
+      "routing_key": "payment.paid",
+      "source": "marketplace.events",
+      "vhost": "/"
+    },
+    {
+      "arguments": {},
+      "destination": "order.q",
+      "destination_type": "queue",
+      "routing_key": "payment.refunded",
+      "source": "marketplace.events",
+      "vhost": "/"
+    },
+    {
+      "arguments": {},
+      "destination": "order.q",
+      "destination_type": "queue",
+      "routing_key": "order.q",
+      "source": "marketplace.retry",
+      "vhost": "/"
+    },
+    {
+      "arguments": {},
+      "destination": "order.q.dlq",
+      "destination_type": "queue",
+      "routing_key": "order.q.dlq",
+      "source": "marketplace.retry",
+      "vhost": "/"
+    },
+    {
+      "arguments": {},
+      "destination": "payment.q",
+      "destination_type": "queue",
+      "routing_key": "order.refund_requested",
+      "source": "marketplace.events",
+      "vhost": "/"
+    },
+    {
+      "arguments": {},
+      "destination": "payment.q",
+      "destination_type": "queue",
+      "routing_key": "order.paid",
+      "source": "marketplace.events",
+      "vhost": "/"
+    },
+    {
+      "arguments": {},
+      "destination": "payment.q",
+      "destination_type": "queue",
+      "routing_key": "sub_order.status_changed",
+      "source": "marketplace.events",
+      "vhost": "/"
+    },
+    {
+      "arguments": {},
+      "destination": "payment.q",
+      "destination_type": "queue",
+      "routing_key": "payment.q",
+      "source": "marketplace.retry",
+      "vhost": "/"
+    },
+    {
+      "arguments": {},
+      "destination": "payment.q.dlq",
+      "destination_type": "queue",
+      "routing_key": "payment.q.dlq",
+      "source": "marketplace.retry",
+      "vhost": "/"
+    },
+    {
+      "arguments": {},
+      "destination": "search.q",
+      "destination_type": "queue",
+      "routing_key": "product.updated",
+      "source": "marketplace.events",
+      "vhost": "/"
+    },
+    {
+      "arguments": {},
+      "destination": "search.q",
+      "destination_type": "queue",
+      "routing_key": "product.deleted",
+      "source": "marketplace.events",
+      "vhost": "/"
+    },
+    {
+      "arguments": {},
+      "destination": "search.q",
+      "destination_type": "queue",
+      "routing_key": "search.q",
+      "source": "marketplace.retry",
+      "vhost": "/"
+    },
+    {
+      "arguments": {},
+      "destination": "search.q.dlq",
+      "destination_type": "queue",
+      "routing_key": "search.q.dlq",
+      "source": "marketplace.retry",
+      "vhost": "/"
+    },
+    {
+      "arguments": {},
+      "destination": "notification.q",
+      "destination_type": "queue",
+      "routing_key": "order.paid",
+      "source": "marketplace.events",
+      "vhost": "/"
+    },
+    {
+      "arguments": {},
+      "destination": "notification.q",
+      "destination_type": "queue",
+      "routing_key": "order.expired",
+      "source": "marketplace.events",
+      "vhost": "/"
+    },
+    {
+      "arguments": {},
+      "destination": "notification.q",
+      "destination_type": "queue",
+      "routing_key": "order.cancelled",
+      "source": "marketplace.events",
+      "vhost": "/"
+    },
+    {
+      "arguments": {},
+      "destination": "notification.q",
+      "destination_type": "queue",
+      "routing_key": "payment.refunded",
+      "source": "marketplace.events",
+      "vhost": "/"
+    },
+    {
+      "arguments": {},
+      "destination": "notification.q",
+      "destination_type": "queue",
+      "routing_key": "sub_order.status_changed",
+      "source": "marketplace.events",
+      "vhost": "/"
+    },
+    {
+      "arguments": {},
+      "destination": "notification.q",
+      "destination_type": "queue",
+      "routing_key": "seller.approved",
+      "source": "marketplace.events",
+      "vhost": "/"
+    },
+    {
+      "arguments": {},
+      "destination": "notification.q",
+      "destination_type": "queue",
+      "routing_key": "notification.q",
+      "source": "marketplace.retry",
+      "vhost": "/"
+    },
+    {
+      "arguments": {},
+      "destination": "notification.q.dlq",
+      "destination_type": "queue",
+      "routing_key": "notification.q.dlq",
+      "source": "marketplace.retry",
+      "vhost": "/"
+    }
+  ],
+  "exchanges": [
+    {
+      "arguments": {},
+      "auto_delete": false,
+      "durable": true,
+      "internal": false,
+      "name": "marketplace.events",
+      "type": "topic",
+      "vhost": "/"
+    },
+    {
+      "arguments": {},
+      "auto_delete": false,
+      "durable": true,
+      "internal": false,
+      "name": "marketplace.retry",
+      "type": "topic",
+      "vhost": "/"
+    }
+  ],
+  "parameters": [],
+  "permissions": [],
+  "policies": [],
+  "queues": [
+    {
+      "arguments": {
+        "x-queue-type": "quorum"
+      },
+      "auto_delete": false,
+      "durable": true,
+      "name": "catalog.q",
+      "vhost": "/"
+    },
+    {
+      "arguments": {
+        "x-dead-letter-exchange": "marketplace.retry",
+        "x-dead-letter-routing-key": "catalog.q",
+        "x-queue-type": "quorum"
+      },
+      "auto_delete": false,
+      "durable": true,
+      "name": "catalog.q.retry",
+      "vhost": "/"
+    },
+    {
+      "arguments": {
+        "x-queue-type": "quorum"
+      },
+      "auto_delete": false,
+      "durable": true,
+      "name": "catalog.q.dlq",
+      "vhost": "/"
+    },
+    {
+      "arguments": {
+        "x-queue-type": "quorum"
+      },
+      "auto_delete": false,
+      "durable": true,
+      "name": "order.q",
+      "vhost": "/"
+    },
+    {
+      "arguments": {
+        "x-dead-letter-exchange": "marketplace.retry",
+        "x-dead-letter-routing-key": "order.q",
+        "x-queue-type": "quorum"
+      },
+      "auto_delete": false,
+      "durable": true,
+      "name": "order.q.retry",
+      "vhost": "/"
+    },
+    {
+      "arguments": {
+        "x-queue-type": "quorum"
+      },
+      "auto_delete": false,
+      "durable": true,
+      "name": "order.q.dlq",
+      "vhost": "/"
+    },
+    {
+      "arguments": {
+        "x-queue-type": "quorum"
+      },
+      "auto_delete": false,
+      "durable": true,
+      "name": "payment.q",
+      "vhost": "/"
+    },
+    {
+      "arguments": {
+        "x-dead-letter-exchange": "marketplace.retry",
+        "x-dead-letter-routing-key": "payment.q",
+        "x-queue-type": "quorum"
+      },
+      "auto_delete": false,
+      "durable": true,
+      "name": "payment.q.retry",
+      "vhost": "/"
+    },
+    {
+      "arguments": {
+        "x-queue-type": "quorum"
+      },
+      "auto_delete": false,
+      "durable": true,
+      "name": "payment.q.dlq",
+      "vhost": "/"
+    },
+    {
+      "arguments": {
+        "x-queue-type": "quorum"
+      },
+      "auto_delete": false,
+      "durable": true,
+      "name": "search.q",
+      "vhost": "/"
+    },
+    {
+      "arguments": {
+        "x-dead-letter-exchange": "marketplace.retry",
+        "x-dead-letter-routing-key": "search.q",
+        "x-queue-type": "quorum"
+      },
+      "auto_delete": false,
+      "durable": true,
+      "name": "search.q.retry",
+      "vhost": "/"
+    },
+    {
+      "arguments": {
+        "x-queue-type": "quorum"
+      },
+      "auto_delete": false,
+      "durable": true,
+      "name": "search.q.dlq",
+      "vhost": "/"
+    },
+    {
+      "arguments": {
+        "x-queue-type": "quorum"
+      },
+      "auto_delete": false,
+      "durable": true,
+      "name": "notification.q",
+      "vhost": "/"
+    },
+    {
+      "arguments": {
+        "x-dead-letter-exchange": "marketplace.retry",
+        "x-dead-letter-routing-key": "notification.q",
+        "x-queue-type": "quorum"
+      },
+      "auto_delete": false,
+      "durable": true,
+      "name": "notification.q.retry",
+      "vhost": "/"
+    },
+    {
+      "arguments": {
+        "x-queue-type": "quorum"
+      },
+      "auto_delete": false,
+      "durable": true,
+      "name": "notification.q.dlq",
+      "vhost": "/"
+    }
+  ],
+  "vhosts": [
+    {
+      "name": "/"
+    }
+  ]
+}
