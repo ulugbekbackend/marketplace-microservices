@@ -4,7 +4,7 @@ Multi-vendor marketplace, microservices in a monorepo (portfolio project).
 The full specification, the task list and the progress journal are kept locally, outside
 version control.
 
-**Current phase:** P0 — foundation: shared contracts, infrastructure, service skeletons.
+**Current phase:** P0 done (tag `phase-0`); next is P1 — auth, catalog and the shop.
 
 ## Commands
 Toolchain is project-local (no global installs): `source .tools/env.sh` (bash) or `. .\.tools\env.ps1` first.

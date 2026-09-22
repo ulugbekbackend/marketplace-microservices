@@ -20,7 +20,7 @@ dev = [
 package = false
 
 [tool.uv.workspace]
-members = ["libs/*"]
+members = ["libs/*", "services/*"]
 
 [tool.uv.sources]
 contracts = { workspace = true }
@@ -49,8 +49,12 @@ plugins = ["pydantic.mypy"]
 module = ["tests.*"]
 disallow_untyped_defs = false
 
+[[tool.mypy.overrides]]
+module = ["django.*", "asgiref.*", "decouple"]
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["libs", "services"]
+testpaths = ["libs"]
 addopts = "-q"
 filterwarnings = ["error"]

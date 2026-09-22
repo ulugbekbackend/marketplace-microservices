@@ -131,3 +131,13 @@ def render_definitions(vhost: str = "/") -> dict[str, Any]:
         "queues": queues,
         "bindings": bindings,
     }
+
+
+if __name__ == "__main__":  # pragma: no cover - used by `make gen-rabbit`
+    import json
+    import sys
+
+    # Written as bytes so the line endings stay LF: the file is read inside a Linux
+    # container and stored in git.
+    document = json.dumps(render_definitions(), indent=2, sort_keys=True) + "\n"
+    sys.stdout.buffer.write(document.encode())

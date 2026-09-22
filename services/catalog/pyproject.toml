@@ -1,0 +1,30 @@
+    [project]
+    name = "catalog-service"
+    version = "0.1.0"
+    description = "Catalog service"
+    requires-python = ">=3.12,<3.13"
+    dependencies = [
+        "django==5.2.17",
+"djangorestframework==3.18.1",
+"drf-spectacular==0.30.0",
+"psycopg[binary]==3.3.6",
+"python-decouple==3.8",
+"gunicorn==26.2.0",
+"prometheus-client==0.26.0",
+"py-common",
+    ]
+
+    [dependency-groups]
+    dev = ["pytest==9.1.1", "pytest-django==4.14.0"]
+
+    [tool.uv]
+    package = false
+
+    [tool.uv.sources]
+    py-common = { workspace = true }
+
+    [tool.pytest.ini_options]
+    DJANGO_SETTINGS_MODULE = "config.settings"
+    pythonpath = ["."]
+    testpaths = ["tests"]
+    addopts = "-q"

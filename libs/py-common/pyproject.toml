@@ -6,11 +6,13 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     "contracts",
     "pydantic==2.13.5",
+    "prometheus-client==0.26.0",
 ]
 
 [project.optional-dependencies]
 redis = ["redis==8.1.0"]
 rabbit = ["aio-pika==10.0.1", "pika==1.4.4"]
+web = ["prometheus-client==0.26.0"]
 
 [build-system]
 requires = ["hatchling==1.32.4"]
@@ -18,6 +20,7 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["py_common"]
+artifacts = ["py_common/py.typed"]
 
 [tool.uv.sources]
 contracts = { workspace = true }

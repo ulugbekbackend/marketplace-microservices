@@ -1,0 +1,299 @@
+name: marketplace
+
+x-service-env: &service-env
+  env_file: [../.env]
+  networks: [edge, internal]
+  restart: unless-stopped
+
+x-python-build: &python-build
+  context: ..
+  additional_contexts:
+    libs: ../libs
+
+networks:
+  edge:
+    name: marketplace_edge
+  internal:
+    name: marketplace_internal
+
+volumes:
+  postgres-data:
+  redis-data:
+  rabbitmq-data:
+  minio-data:
+  elasticsearch-data:
+
+services:
+  traefik:
+    image: traefik:v3.7.13
+    command: ["--configFile=/etc/traefik/traefik.yml"]
+    ports:
+      - "80:80"
+    volumes:
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [edge]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.dashboard.rule=Host(`traefik.localhost`)
+      - traefik.http.routers.dashboard.service=api@internal
+
+  postgres:
+    image: postgres:16.15-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_SUPERUSER}
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD}
+      POSTGRES_DB: postgres
+      DB_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/init.sh:/docker-entrypoint-initdb.d/10-databases.sh:ro
+    networks: [internal]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7.4.11-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    networks: [internal]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  rabbitmq:
+    image: rabbitmq:4.3.6-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    networks: [edge, internal]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_running"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.rabbit.rule=Host(`rabbit.localhost`)
+      - traefik.http.services.rabbit.loadbalancer.server.port=15672
+
+  # Imports exchanges, queues and bindings once the broker is up. Credentials stay in
+  # the environment, so the definitions file itself holds no secrets.
+  rabbitmq-init:
+    image: curlimages/curl:8.22.0
+    depends_on:
+      rabbitmq: {condition: service_healthy}
+    volumes:
+      - ./rabbitmq/definitions.json:/definitions.json:ro
+    networks: [internal]
+    restart: "no"
+    command:
+      - sh
+      - -c
+      - >
+        curl -sS -f -u "$${RABBITMQ_USER}:$${RABBITMQ_PASSWORD}"
+        -H 'content-type: application/json'
+        -X POST http://rabbitmq:15672/api/definitions
+        --data-binary @/definitions.json
+    environment:
+      RABBITMQ_USER: ${RABBITMQ_USER}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+
+  minio:
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY}
+    volumes:
+      - minio-data:/data
+    networks: [edge, internal]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.minio.rule=Host(`minio.localhost`)
+      - traefik.http.services.minio.loadbalancer.server.port=9000
+
+  minio-init:
+    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
+    depends_on:
+      minio: {condition: service_healthy}
+    networks: [internal]
+    restart: "no"
+    environment:
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      S3_BUCKET: ${S3_BUCKET}
+    entrypoint:
+      - sh
+      - -c
+      - >
+        mc alias set local http://minio:9000 "$${S3_ACCESS_KEY}" "$${S3_SECRET_KEY}" &&
+        mc mb --ignore-existing local/$${S3_BUCKET} &&
+        mc anonymous set download local/$${S3_BUCKET}
+
+  mailpit:
+    image: axllent/mailpit:v1.31.2
+    networks: [edge, internal]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.mail.rule=Host(`mail.localhost`)
+      - traefik.http.services.mail.loadbalancer.server.port=8025
+
+  elasticsearch:
+    image: elasticsearch:8.19.21
+    profiles: [search, full]
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    networks: [internal]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  auth:
+    <<: *service-env
+    build:
+      <<: *python-build
+      dockerfile: services/auth/Dockerfile
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      rabbitmq: {condition: service_healthy}
+    healthcheck: &python-healthcheck
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health/live', timeout=3).status == 200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.auth.rule=Host(`api.localhost`) && PathPrefix(`/api/auth`)
+      - traefik.http.routers.auth.middlewares=cors@file
+      - traefik.http.services.auth.loadbalancer.server.port=8000
+
+  catalog:
+    <<: *service-env
+    build:
+      <<: *python-build
+      dockerfile: services/catalog/Dockerfile
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      rabbitmq: {condition: service_healthy}
+    healthcheck: *python-healthcheck
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.catalog.rule=Host(`api.localhost`) && PathPrefix(`/api/catalog`)
+      - traefik.http.routers.catalog.middlewares=cors@file
+      - traefik.http.services.catalog.loadbalancer.server.port=8000
+
+  order:
+    <<: *service-env
+    build:
+      <<: *python-build
+      dockerfile: services/order/Dockerfile
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      rabbitmq: {condition: service_healthy}
+    healthcheck: *python-healthcheck
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.order.rule=Host(`api.localhost`) && PathPrefix(`/api/orders`)
+      - traefik.http.routers.order.middlewares=cors@file
+      - traefik.http.services.order.loadbalancer.server.port=8000
+
+  cart:
+    <<: *service-env
+    build:
+      <<: *python-build
+      dockerfile: services/cart/Dockerfile
+    depends_on:
+      redis: {condition: service_healthy}
+    healthcheck: *python-healthcheck
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.cart.rule=Host(`api.localhost`) && PathPrefix(`/api/cart`)
+      - traefik.http.routers.cart.middlewares=cors@file
+      - traefik.http.services.cart.loadbalancer.server.port=8000
+
+  search:
+    <<: *service-env
+    build:
+      <<: *python-build
+      dockerfile: services/search/Dockerfile
+    depends_on:
+      rabbitmq: {condition: service_healthy}
+    healthcheck: *python-healthcheck
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.search.rule=Host(`api.localhost`) && PathPrefix(`/api/search`)
+      - traefik.http.routers.search.middlewares=cors@file
+      - traefik.http.services.search.loadbalancer.server.port=8000
+
+  payment:
+    <<: *service-env
+    build:
+      <<: *python-build
+      dockerfile: services/payment/Dockerfile
+    depends_on:
+      postgres: {condition: service_healthy}
+      rabbitmq: {condition: service_healthy}
+    healthcheck: *python-healthcheck
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.payment.rule=Host(`api.localhost`) && PathPrefix(`/api/payments`)
+      - traefik.http.routers.payment.middlewares=cors@file
+      - traefik.http.services.payment.loadbalancer.server.port=8000
+
+  notification:
+    <<: *service-env
+    build:
+      <<: *python-build
+      dockerfile: services/notification/Dockerfile
+    depends_on:
+      redis: {condition: service_healthy}
+      rabbitmq: {condition: service_healthy}
+      mailpit: {condition: service_healthy}
+    healthcheck: *python-healthcheck
+    labels:
+      # The service consumes events only; the route exists so health is observable.
+      - traefik.enable=true
+      - traefik.http.routers.notification.rule=Host(`api.localhost`) && PathPrefix(`/api/notifications`)
+      - traefik.http.services.notification.loadbalancer.server.port=8000
