@@ -343,3 +343,19 @@ services:
       - traefik.enable=true
       - traefik.http.routers.notification.rule=Host(`api.localhost`) && PathPrefix(`/api/notifications`)
       - traefik.http.services.notification.loadbalancer.server.port=8000
+
+  shop:
+    build:
+      context: ../frontend
+      dockerfile: apps/shop/Dockerfile
+    networks: [edge]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.shop.rule=Host(`shop.localhost`)
+      - traefik.http.services.shop.loadbalancer.server.port=8080

@@ -7,7 +7,7 @@ PY_SERVICES := auth catalog order cart search payment notification
 
 .DEFAULT_GOAL := help
 .PHONY: help up up-full down logs ps build migrate seed reindex \
-        test test-libs test-integration lint fmt typecheck gen-rabbit keys clean
+        test test-libs test-integration lint fmt typecheck gen-rabbit gen-api keys clean
 
 help: ## Show available targets
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | sort | awk -F':.*?## ' '{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -79,6 +79,12 @@ fmt: ## Format the code
 typecheck: ## Type check with mypy
 	uv run mypy libs
 	@for s in $(PY_SERVICES); do echo "== $$s"; (cd services/$$s && uv run --project . mypy .) || exit 1; done
+
+API_SCHEMAS := frontend/packages/api-client/openapi
+
+gen-api: ## Export OpenAPI schemas and regenerate the frontend API types
+	@for s in auth catalog; do 		(cd services/$$s && uv run --project . python manage.py spectacular 			--format openapi-json --file ../../$(API_SCHEMAS)/$$s.json) || exit 1; 	done
+	cd frontend && pnpm gen-api
 
 gen-rabbit: ## Regenerate the broker topology from the contracts
 	uv run python -m contracts.topology > infra/rabbitmq/definitions.json
