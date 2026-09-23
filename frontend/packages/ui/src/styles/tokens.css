@@ -1,0 +1,96 @@
+/*
+ * Bozorcha design tokens.
+ * Light values live in @theme so Tailwind generates utilities (bg-primary, text-muted, ...);
+ * the .dark class overrides the same custom properties at runtime.
+ *
+ * Brand tokens follow the design system table. The *-ink / *-soft / *-fg tokens are derived
+ * pairs that keep text on coloured backgrounds at WCAG AA (e.g. amber accent as text on white
+ * is only 2.2:1, so prices use accent-ink).
+ */
+@theme {
+  --color-*: initial;
+
+  --color-primary: #0f6e56;
+  --color-primary-hover: #0b5a46;
+  --color-primary-soft: #e3f2ec;
+  --color-primary-fg: #ffffff;
+
+  --color-accent: #ef9f27;
+  --color-accent-hover: #e08e14;
+  --color-accent-fg: #2b1a00;
+  --color-accent-ink: #8a5100;
+  --color-accent-soft: #fdf1de;
+
+  --color-bg: #faf8f5;
+  --color-surface: #ffffff;
+  --color-surface-2: #f3f0eb;
+  --color-border: #e4dfd7;
+  --color-border-strong: #cfc8bd;
+  --color-text: #1f1c18;
+  --color-text-muted: #6b645b;
+
+  --color-danger: #c63d2f;
+  --color-danger-ink: #b33629;
+  --color-danger-soft: #fceeec;
+  --color-danger-fg: #ffffff;
+  --color-success: #1e8a4c;
+  --color-success-ink: #17723f;
+  --color-success-soft: #eaf5ee;
+  --color-info: #2f6fb5;
+  --color-info-ink: #2a64a5;
+  --color-info-soft: #edf3fa;
+  --color-purple: #6b4bc4;
+  --color-purple-ink: #6b4bc4;
+  --color-purple-soft: #efebfa;
+
+  --color-scrim: rgb(20 18 16 / 0.5);
+
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-heading: 'Manrope', 'Inter', ui-sans-serif, system-ui, sans-serif;
+
+  --shadow-soft: 0 1px 2px rgb(0 0 0 / 0.06), 0 2px 8px rgb(0 0 0 / 0.04);
+
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@layer base {
+  .dark {
+    --color-primary: #34b08e;
+    --color-primary-hover: #4cc4a2;
+    --color-primary-soft: #123b31;
+    --color-primary-fg: #10201b;
+
+    --color-accent: #f4b04a;
+    --color-accent-hover: #f7c170;
+    --color-accent-fg: #2b1a00;
+    --color-accent-ink: #f4b04a;
+    --color-accent-soft: #3a2a12;
+
+    --color-bg: #151412;
+    --color-surface: #1e1c1a;
+    --color-surface-2: #262422;
+    --color-border: #37332f;
+    --color-border-strong: #4a4540;
+    --color-text: #f2efea;
+    --color-text-muted: #a59e94;
+
+    --color-danger: #f0715f;
+    --color-danger-ink: #f0715f;
+    --color-danger-soft: #3d1f1a;
+    --color-danger-fg: #151412;
+    --color-success: #4cc27f;
+    --color-success-ink: #4cc27f;
+    --color-success-soft: #1b3526;
+    --color-info: #6fa6e6;
+    --color-info-ink: #6fa6e6;
+    --color-info-soft: #1b2b40;
+    --color-purple: #a58bf0;
+    --color-purple-ink: #a58bf0;
+    --color-purple-soft: #2c2342;
+
+    --color-scrim: rgb(0 0 0 / 0.6);
+
+    /* dark mode separates surfaces with borders, not shadows */
+    --shadow-soft: 0 0 #0000;
+  }
+}
