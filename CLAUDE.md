@@ -4,7 +4,7 @@ Multi-vendor marketplace, microservices in a monorepo (portfolio project).
 The full specification, the task list and the progress journal are kept locally, outside
 version control.
 
-**Current phase:** P0 done (tag `phase-0`); next is P1 — auth, catalog and the shop.
+**Current phase:** P1 done (tag `phase-1`): auth, catalog, gateway, shop, seed. Next is P2 — cart and orders.
 
 ## Commands
 Toolchain is project-local (no global installs): `source .tools/env.sh` (bash) or `. .\.tools\env.ps1` first.
@@ -14,7 +14,9 @@ make up-full           # + search, monitoring profiles
 make migrate / seed / reindex
 make test / test-<svc> / test-e2e / load-test
 make lint / fmt / typecheck
-make gen-api
+make test-integration  # gateway tests against the running stack
+make keys              # RS256 key pair for auth (ignored by git)
+make gen-api           # OpenAPI schemas -> frontend API types
 ```
 
 ## Layout
