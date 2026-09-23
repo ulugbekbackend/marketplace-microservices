@@ -7,7 +7,7 @@ PY_SERVICES := auth catalog order cart search payment notification
 
 .DEFAULT_GOAL := help
 .PHONY: help up up-full down logs ps build migrate seed reindex \
-        test test-libs lint fmt typecheck gen-rabbit keys clean
+        test test-libs test-integration lint fmt typecheck gen-rabbit keys clean
 
 help: ## Show available targets
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | sort | awk -F':.*?## ' '{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -57,6 +57,9 @@ test test-libs $(addprefix test-,$(PY_SERVICES)): export RABBITMQ_HOST = localho
 test: ## Run every Python test suite (shared libs + each service)
 	uv run pytest libs
 	@for s in $(PY_SERVICES); do echo "== $$s"; (cd services/$$s && uv run --project . pytest) || exit 1; done
+
+test-integration: ## Gateway and system tests against the running stack
+	uv run pytest tests/integration -p no:cacheprovider
 
 test-libs: ## Run the shared library tests only
 	uv run pytest libs
