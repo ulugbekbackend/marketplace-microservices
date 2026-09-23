@@ -1,6 +1,7 @@
 """Health and metrics are served both at the root and behind the gateway prefix."""
 
-from django.urls import path
+from django.contrib import admin
+from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
 from config.health import build_registry
@@ -17,4 +18,6 @@ urlpatterns = [
         SpectacularSwaggerView.as_view(url_name="schema"),
         name="docs",
     ),
+    path("api/auth/django-admin/", admin.site.urls),
+    path("api/auth/", include("accounts.urls")),
 ]

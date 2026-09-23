@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="uz">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0F6E56" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#151412" media="(prefers-color-scheme: dark)" />
+    <meta name="description" content="Bozorcha: mahalliy do'konlar mahsulotlari bitta joyda." />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>Bozorcha</title>
+    <script>
+      // Apply the saved or system theme before first paint to avoid a light flash.
+      ;(function () {
+        try {
+          var saved = JSON.parse(localStorage.getItem('bozorcha.theme') || 'null')
+          var mode = saved && saved.state && saved.state.mode
+          var dark =
+            mode === 'dark' ||
+            ((!mode || mode === 'system') && matchMedia('(prefers-color-scheme: dark)').matches)
+          if (dark) document.documentElement.classList.add('dark')
+        } catch (e) {}
+      })()
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

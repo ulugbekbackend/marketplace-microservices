@@ -14,6 +14,8 @@ dev = [
     "mypy==2.3.1",
     "pre-commit==4.6.2",
     "uv==0.12.17",
+    "django-stubs==5.2.9",
+    "djangorestframework-stubs==3.16.9",
 ]
 
 [tool.uv]
@@ -29,6 +31,7 @@ py-common = { workspace = true }
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+extend-exclude = ["**/migrations/*"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "C4", "DTZ", "RUF"]
@@ -50,7 +53,7 @@ module = ["tests.*"]
 disallow_untyped_defs = false
 
 [[tool.mypy.overrides]]
-module = ["django.*", "asgiref.*", "decouple"]
+module = ["decouple", "drf_spectacular.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

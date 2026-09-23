@@ -13,6 +13,7 @@ dependencies = [
 redis = ["redis==8.1.0"]
 rabbit = ["aio-pika==10.0.1", "pika==1.4.4"]
 web = ["prometheus-client==0.26.0"]
+drf = ["django==5.2.17", "djangorestframework==3.18.1"]
 
 [build-system]
 requires = ["hatchling==1.32.4"]

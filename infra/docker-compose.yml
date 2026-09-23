@@ -191,6 +191,8 @@ services:
     build:
       <<: *python-build
       dockerfile: services/auth/Dockerfile
+    volumes:
+      - ./secrets:/run/secrets:ro
     depends_on:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
@@ -205,6 +207,13 @@ services:
       - traefik.enable=true
       - traefik.http.routers.auth.rule=Host(`api.localhost`) && PathPrefix(`/api/auth`)
       - traefik.http.routers.auth.middlewares=cors@file
+      - traefik.http.routers.auth.service=auth
+      - traefik.http.routers.auth-otp.rule=Host(`api.localhost`) && PathPrefix(`/api/auth/otp`)
+      - traefik.http.routers.auth-otp.middlewares=cors@file,otp-ratelimit@file
+      - traefik.http.routers.auth-otp.service=auth
+      - traefik.http.routers.auth-private.rule=Host(`api.localhost`) && (PathPrefix(`/api/auth/me`) || PathPrefix(`/api/auth/seller`) || PathPrefix(`/api/auth/admin`))
+      - traefik.http.routers.auth-private.middlewares=cors@file,jwt@file
+      - traefik.http.routers.auth-private.service=auth
       - traefik.http.services.auth.loadbalancer.server.port=8000
 
   catalog:
@@ -220,8 +229,30 @@ services:
     labels:
       - traefik.enable=true
       - traefik.http.routers.catalog.rule=Host(`api.localhost`) && PathPrefix(`/api/catalog`)
-      - traefik.http.routers.catalog.middlewares=cors@file
+      - traefik.http.routers.catalog.middlewares=cors@file,jwt-optional@file
+      - traefik.http.routers.catalog.service=catalog
+      - traefik.http.routers.catalog-seller.rule=Host(`api.localhost`) && PathPrefix(`/api/catalog/seller`)
+      - traefik.http.routers.catalog-seller.middlewares=cors@file,jwt@file
+      - traefik.http.routers.catalog-seller.service=catalog
+      - traefik.http.routers.catalog-health.rule=Host(`api.localhost`) && PathPrefix(`/api/catalog/health`)
+      - traefik.http.routers.catalog-health.middlewares=cors@file
+      - traefik.http.routers.catalog-health.service=catalog
       - traefik.http.services.catalog.loadbalancer.server.port=8000
+
+  catalog-worker:
+    <<: *service-env
+    build:
+      <<: *python-build
+      dockerfile: services/catalog/Dockerfile
+    command: ["celery", "-A", "config", "worker", "--loglevel=INFO", "--concurrency=2"]
+    depends_on:
+      catalog: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A config inspect ping --timeout 5 | grep -q pong"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
 
   order:
     <<: *service-env
@@ -236,7 +267,11 @@ services:
     labels:
       - traefik.enable=true
       - traefik.http.routers.order.rule=Host(`api.localhost`) && PathPrefix(`/api/orders`)
-      - traefik.http.routers.order.middlewares=cors@file
+      - traefik.http.routers.order.middlewares=cors@file,jwt@file
+      - traefik.http.routers.order.service=order
+      - traefik.http.routers.order-health.rule=Host(`api.localhost`) && PathPrefix(`/api/orders/health`)
+      - traefik.http.routers.order-health.middlewares=cors@file
+      - traefik.http.routers.order-health.service=order
       - traefik.http.services.order.loadbalancer.server.port=8000
 
   cart:
@@ -250,7 +285,11 @@ services:
     labels:
       - traefik.enable=true
       - traefik.http.routers.cart.rule=Host(`api.localhost`) && PathPrefix(`/api/cart`)
-      - traefik.http.routers.cart.middlewares=cors@file
+      - traefik.http.routers.cart.middlewares=cors@file,jwt-optional@file
+      - traefik.http.routers.cart.service=cart
+      - traefik.http.routers.cart-health.rule=Host(`api.localhost`) && PathPrefix(`/api/cart/health`)
+      - traefik.http.routers.cart-health.middlewares=cors@file
+      - traefik.http.routers.cart-health.service=cart
       - traefik.http.services.cart.loadbalancer.server.port=8000
 
   search:
@@ -279,7 +318,14 @@ services:
     labels:
       - traefik.enable=true
       - traefik.http.routers.payment.rule=Host(`api.localhost`) && PathPrefix(`/api/payments`)
-      - traefik.http.routers.payment.middlewares=cors@file
+      - traefik.http.routers.payment.middlewares=cors@file,jwt@file
+      - traefik.http.routers.payment.service=payment
+      - traefik.http.routers.payment-callbacks.rule=Host(`api.localhost`) && (PathPrefix(`/api/payments/payme`) || PathPrefix(`/api/payments/click`))
+      - traefik.http.routers.payment-callbacks.middlewares=cors@file
+      - traefik.http.routers.payment-callbacks.service=payment
+      - traefik.http.routers.payment-health.rule=Host(`api.localhost`) && PathPrefix(`/api/payments/health`)
+      - traefik.http.routers.payment-health.middlewares=cors@file
+      - traefik.http.routers.payment-health.service=payment
       - traefik.http.services.payment.loadbalancer.server.port=8000
 
   notification:
@@ -297,3 +343,19 @@ services:
       - traefik.enable=true
       - traefik.http.routers.notification.rule=Host(`api.localhost`) && PathPrefix(`/api/notifications`)
       - traefik.http.services.notification.loadbalancer.server.port=8000
+
+  shop:
+    build:
+      context: ../frontend
+      dockerfile: apps/shop/Dockerfile
+    networks: [edge]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.shop.rule=Host(`shop.localhost`)
+      - traefik.http.services.shop.loadbalancer.server.port=8080

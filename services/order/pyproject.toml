@@ -1,30 +1,47 @@
-    [project]
-    name = "order-service"
-    version = "0.1.0"
-    description = "Order service"
-    requires-python = ">=3.12,<3.13"
-    dependencies = [
-        "django==5.2.17",
-"djangorestframework==3.18.1",
-"drf-spectacular==0.30.0",
-"psycopg[binary]==3.3.6",
-"python-decouple==3.8",
-"gunicorn==26.2.0",
-"prometheus-client==0.26.0",
-"py-common",
-    ]
+[project]
+name = "order-service"
+version = "0.1.0"
+description = "Order service"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "django==5.2.17",
+    "djangorestframework==3.18.1",
+    "drf-spectacular==0.30.0",
+    "psycopg[binary]==3.3.6",
+    "python-decouple==3.8",
+    "gunicorn==26.2.0",
+    "prometheus-client==0.26.0",
+    "py-common[drf]",
+]
 
-    [dependency-groups]
-    dev = ["pytest==9.1.1", "pytest-django==4.14.0"]
+[dependency-groups]
+dev = ["pytest==9.1.1", "pytest-django==4.14.0", "pytest-cov==7.1.0"]
 
-    [tool.uv]
-    package = false
+[tool.uv]
+package = false
 
-    [tool.uv.sources]
-    py-common = { workspace = true }
+[tool.uv.sources]
+py-common = { workspace = true }
 
-    [tool.pytest.ini_options]
-    DJANGO_SETTINGS_MODULE = "config.settings"
-    pythonpath = ["."]
-    testpaths = ["tests"]
-    addopts = "-q"
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings"
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unreachable = true
+plugins = ["mypy_django_plugin.main", "pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+disallow_untyped_defs = false
+
+[[tool.mypy.overrides]]
+module = ["decouple", "drf_spectacular.*"]
+ignore_missing_imports = true
+
+[tool.django-stubs]
+django_settings_module = "config.settings"

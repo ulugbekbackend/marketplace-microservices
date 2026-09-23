@@ -1,0 +1,13 @@
+packages:
+  - packages/*
+  - apps/*
+
+allowBuilds:
+  esbuild: true
+
+peerDependencyRules:
+  allowedVersions:
+    # openapi-typescript declares ^5 but works with the TypeScript 6 compiler API
+    openapi-typescript>typescript: '6'
+    # jsx-a11y has not yet widened its peer range to ESLint 10
+    eslint-plugin-jsx-a11y>eslint: '10'

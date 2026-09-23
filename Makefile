@@ -1,18 +1,27 @@
 SHELL := /bin/sh
+-include .env
+HOST_POSTGRES_PORT ?= 5432
+HOST_REDIS_PORT ?= 6379
 COMPOSE := docker compose -f infra/docker-compose.yml --env-file .env
 PY_SERVICES := auth catalog order cart search payment notification
 
 .DEFAULT_GOAL := help
 .PHONY: help up up-full down logs ps build migrate seed reindex \
-        test test-libs lint fmt typecheck gen-rabbit clean
+        test test-libs test-integration lint fmt typecheck gen-rabbit gen-api keys clean
 
 help: ## Show available targets
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | sort | awk -F':.*?## ' '{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
 
-up: ## Start the stack (infrastructure + services)
+keys: ## Create the RS256 key pair auth signs tokens with (kept out of git)
+	@mkdir -p infra/secrets
+	@test -f infra/secrets/jwt_private.pem || openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out infra/secrets/jwt_private.pem
+	@openssl rsa -in infra/secrets/jwt_private.pem -pubout -out infra/secrets/jwt_public.pem 2>/dev/null
+	@echo "keys ready in infra/secrets/"
+
+up: keys ## Start the stack (infrastructure + services)
 	$(COMPOSE) up -d --build
 
-up-full: ## Start everything including search and monitoring profiles
+up-full: keys ## Start everything including search and monitoring profiles
 	$(COMPOSE) --profile full --profile search --profile monitoring up -d --build
 
 down: ## Stop the stack and remove containers
@@ -31,15 +40,27 @@ migrate: ## Apply database migrations in running containers
 	@for s in auth catalog order; do $(COMPOSE) exec -T $$s python manage.py migrate --noinput; done
 	$(COMPOSE) exec -T payment alembic upgrade head
 
-seed: ## Load demo data
-	$(COMPOSE) exec -T catalog python -m tools.seed
+seed: ## Load demo data (users, shops, categories, products); safe to repeat
+	$(COMPOSE) exec -T auth python manage.py seed_users
+	$(COMPOSE) exec -T catalog python manage.py seed_catalog
 
 reindex: ## Rebuild the search index from the catalog
 	$(COMPOSE) exec -T search python -m app.reindex
 
+# Tests run on the host against the dev stack (make up exposes these ports locally).
+test test-libs $(addprefix test-,$(PY_SERVICES)): export POSTGRES_HOST = 127.0.0.1
+test test-libs $(addprefix test-,$(PY_SERVICES)): export POSTGRES_PORT = $(HOST_POSTGRES_PORT)
+test test-libs $(addprefix test-,$(PY_SERVICES)): export REDIS_URL = redis://127.0.0.1:$(HOST_REDIS_PORT)/0
+test test-libs $(addprefix test-,$(PY_SERVICES)): export REDIS_HOST = 127.0.0.1
+test test-libs $(addprefix test-,$(PY_SERVICES)): export REDIS_PORT = $(HOST_REDIS_PORT)
+test test-libs $(addprefix test-,$(PY_SERVICES)): export RABBITMQ_HOST = localhost
+
 test: ## Run every Python test suite (shared libs + each service)
 	uv run pytest libs
 	@for s in $(PY_SERVICES); do echo "== $$s"; (cd services/$$s && uv run --project . pytest) || exit 1; done
+
+test-integration: ## Gateway and system tests against the running stack
+	uv run pytest tests/integration -p no:cacheprovider
 
 test-libs: ## Run the shared library tests only
 	uv run pytest libs
@@ -57,7 +78,13 @@ fmt: ## Format the code
 
 typecheck: ## Type check with mypy
 	uv run mypy libs
-	@for s in $(PY_SERVICES); do echo "== $$s"; uv run mypy services/$$s || exit 1; done
+	@for s in $(PY_SERVICES); do echo "== $$s"; (cd services/$$s && uv run --project . mypy .) || exit 1; done
+
+API_SCHEMAS := frontend/packages/api-client/openapi
+
+gen-api: ## Export OpenAPI schemas and regenerate the frontend API types
+	@for s in auth catalog; do 		(cd services/$$s && uv run --project . python manage.py spectacular 			--format openapi-json --file ../../$(API_SCHEMAS)/$$s.json) || exit 1; 	done
+	cd frontend && pnpm gen-api
 
 gen-rabbit: ## Regenerate the broker topology from the contracts
 	uv run python -m contracts.topology > infra/rabbitmq/definitions.json

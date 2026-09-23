@@ -33,6 +33,11 @@ Defined as CSS variables in `packages/ui/src/styles/tokens.css` and mapped into 
 | `--color-info` | `#2F6FB5` | `#6FA6E6` | |
 | `--color-purple` | `#6B4BC4` | `#A58BF0` | shipped |
 
+Derived tokens keep every text pair at WCAG AA (defined next to the brand values in `packages/ui/src/styles/tokens.css`):
+- `--color-accent-ink` (`#8A5100` light / `#F4B04A` dark) — price and accent **text**. The brand amber on white is only 2.2:1, so never use `--color-accent` for text.
+- `--color-primary-fg` (`#FFFFFF` light / `#10201B` dark) — text on primary buttons; white on the dark-mode primary is only 2.7:1.
+- `--color-{danger,success,info,purple}-ink` for status text and `-soft` for status backgrounds (badges, alerts); `--color-accent-soft` for discount chips.
+
 Neutrals are a warm gray scale. Dark mode is mandatory: `class="dark"` on `<html>`, toggle persisted, defaults to system. All text/background pairs meet WCAG AA.
 
 ## Typography

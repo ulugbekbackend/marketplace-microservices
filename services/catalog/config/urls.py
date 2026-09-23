@@ -1,6 +1,6 @@
 """Health and metrics are served both at the root and behind the gateway prefix."""
 
-from django.urls import path
+from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
 from config.health import build_registry
@@ -11,6 +11,7 @@ registry = build_registry()
 urlpatterns = [
     *health_urlpatterns(registry),
     *health_urlpatterns(registry, prefix="api/catalog/"),
+    path("api/catalog/", include("products.urls")),
     path("api/catalog/schema/", SpectacularAPIView.as_view(), name="schema"),
     path(
         "api/catalog/docs/",
