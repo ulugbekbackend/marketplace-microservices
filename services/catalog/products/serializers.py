@@ -129,12 +129,17 @@ class _PricedProductFields(serializers.Serializer[Product]):
 
 
 class PublicVariantSerializer(serializers.ModelSerializer[ProductVariant]):
+    available = serializers.SerializerMethodField()
     in_stock = serializers.SerializerMethodField()
     attributes = VariantAttributeSerializer(source="attribute_values", many=True, read_only=True)
 
     class Meta:
         model = ProductVariant
-        fields = ("id", "sku", "price_tiyin", "in_stock", "attributes")
+        fields = ("id", "sku", "price_tiyin", "available", "in_stock", "attributes")
+
+    def get_available(self, variant: ProductVariant) -> int:
+        """Units a customer can still buy: stock not held by an active reservation."""
+        return max(variant.available, 0)
 
     def get_in_stock(self, variant: ProductVariant) -> bool:
         return variant.available > 0

@@ -157,7 +157,9 @@ def test_product_detail_shape(api: APIClient, categories: dict[str, Category]) -
     assert set(variants) == {"S25-RED", "S25-BLK"}
     assert variants["S25-RED"]["price_tiyin"] == 900
     assert variants["S25-RED"]["in_stock"] is True
+    assert variants["S25-RED"]["available"] == 3
     assert variants["S25-BLK"]["in_stock"] is False
+    assert variants["S25-BLK"]["available"] == 0  # all of it is reserved
     assert variants["S25-RED"]["attributes"] == [
         {"value_id": str(red.id), "code": "color", "name": "Color", "value": "red"}
     ]
