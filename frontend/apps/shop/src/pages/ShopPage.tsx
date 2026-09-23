@@ -65,6 +65,7 @@ export function ShopPage() {
           slug={shop.data.slug}
           productCount={shop.data.product_count}
           createdAt={shop.data.created_at}
+          verified={shop.data.is_verified}
         />
       )}
 

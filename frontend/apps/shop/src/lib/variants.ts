@@ -17,6 +17,9 @@ export type AttributeGroup = {
   values: string[]
 }
 
+/** A variant can be bought when the API marks it in stock and units remain unreserved. */
+export const isBuyable = (variant: ProductVariant) => variant.in_stock && variant.available > 0
+
 const valueOf = (variant: ProductVariant, code: string) =>
   variant.attributes.find((attribute) => attribute.code === code)?.value
 
@@ -54,7 +57,7 @@ export function findVariant(
 
 /** Starts on the cheapest in-stock variant (falls back to the first one). */
 export function initialSelection(variants: ProductVariant[]): Selection {
-  const inStock = variants.filter((variant) => variant.in_stock)
+  const inStock = variants.filter(isBuyable)
   const pool = inStock.length > 0 ? inStock : variants
   const start = [...pool].sort((a, b) => a.price_tiyin - b.price_tiyin)[0]
   return Object.fromEntries(start?.attributes.map(({ code, value }) => [code, value]) ?? [])
@@ -67,7 +70,7 @@ export function optionState(
   value: string,
 ): OptionState {
   const withValue = variants.filter(
-    (variant) => variant.in_stock && valueOf(variant, code) === value,
+    (variant) => isBuyable(variant) && valueOf(variant, code) === value,
   )
   if (withValue.length === 0) return 'unavailable'
   return withValue.some((variant) => matches(variant, selection, code))
@@ -87,12 +90,12 @@ export function selectOption(
 ): Selection {
   const next = { ...selection, [code]: value }
   const exact = findVariant(variants, next)
-  if (exact?.in_stock) return next
+  if (exact && isBuyable(exact)) return next
 
   const candidates = variants.filter((variant) => valueOf(variant, code) === value)
   if (candidates.length === 0) return next
   const score = (variant: ProductVariant) =>
-    (variant.in_stock ? 1000 : 0) +
+    (isBuyable(variant) ? 1000 : 0) +
     Object.entries(selection).filter(([c, v]) => c !== code && valueOf(variant, c) === v).length
   const best = [...candidates].sort((a, b) => score(b) - score(a))[0]!
   return Object.fromEntries(best.attributes.map((attribute) => [attribute.code, attribute.value]))

@@ -1,5 +1,5 @@
-import { Card, cn } from '@bozorcha/ui'
-import { ChevronRight, Store } from 'lucide-react'
+import { Badge, Card, cn } from '@bozorcha/ui'
+import { BadgeCheck, ChevronRight, Store } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
@@ -9,6 +9,8 @@ type ShopCardProps = {
   slug: string
   productCount?: number
   createdAt?: string
+  /** Seller passed the platform's verification. */
+  verified?: boolean
   /** Page heading variant (shop page) vs. compact link card (product page). */
   as?: 'heading' | 'link'
   label?: ReactNode
@@ -35,6 +37,7 @@ export function ShopCard({
   slug,
   productCount,
   createdAt,
+  verified,
   as = 'link',
   label,
   className,
@@ -58,6 +61,12 @@ export function ShopCard({
           <h1 className="font-heading text-2xl font-extrabold tracking-tight text-text [overflow-wrap:anywhere] sm:text-3xl">
             {name}
           </h1>
+          {verified && (
+            <Badge tone="primary" className="self-start">
+              <BadgeCheck aria-hidden="true" size={14} strokeWidth={2} />
+              {t('shop.verified')}
+            </Badge>
+          )}
           <p className="flex flex-wrap gap-x-4 gap-y-0.5 text-sm text-text-muted">{meta}</p>
         </div>
       </Card>
@@ -73,7 +82,18 @@ export function ShopCard({
         <ShopMonogram name={name} />
         <span className="flex min-w-0 flex-1 flex-col">
           {label && <span className="text-xs text-text-muted">{label}</span>}
-          <span className="truncate font-semibold text-text">{name}</span>
+          <span className="flex min-w-0 items-center gap-1">
+            <span className="truncate font-semibold text-text">{name}</span>
+            {verified && (
+              <BadgeCheck
+                size={16}
+                strokeWidth={2}
+                className="shrink-0 text-primary"
+                role="img"
+                aria-label={t('shop.verified')}
+              />
+            )}
+          </span>
           <span className="flex flex-wrap gap-x-3 text-xs text-text-muted">{meta}</span>
         </span>
         <span className="flex shrink-0 items-center gap-0.5 text-sm font-semibold text-primary">

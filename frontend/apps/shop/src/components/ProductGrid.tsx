@@ -52,7 +52,11 @@ export function ProductGrid({
             maxPrice={product.max_price_tiyin}
             sellerName={hideSeller ? undefined : product.seller.shop_name}
             inStock={product.in_stock}
-            labels={{ outOfStock: t('product.outOfStock'), from: t('product.from') }}
+            labels={{
+              outOfStock: t('product.outOfStock'),
+              from: t('product.from'),
+              noPrice: t('product.noPrice'),
+            }}
             linkAs={RouterLink}
           />
         </li>

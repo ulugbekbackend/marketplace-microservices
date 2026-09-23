@@ -6,8 +6,8 @@ import { apiError, json, renderWithApi } from '../test/renderApp'
 import { ProductPage } from './ProductPage'
 
 const attrs = (color: string, size: string) => [
-  { code: 'color', name: 'Rang', value: color },
-  { code: 'size', name: "O'lcham", value: size },
+  { code: 'color', name: 'Rang', value: color, value_id: `color-${color}` },
+  { code: 'size', name: "O'lcham", value: size, value_id: `size-${size}` },
 ]
 
 const product: ProductDetail = {
@@ -15,9 +15,16 @@ const product: ProductDetail = {
   title: "Paxta ko'ylak",
   slug: 'paxta-koylak',
   description: 'Yengil paxta mato.',
-  category: { id: 'c1', name: 'Kiyim', slug: 'kiyim' },
-  seller: { id: 's1', shop_name: "Marg'ilon atlas", slug: 'margilon-atlas' },
+  category: { id: 'c2', name: 'Ayollar kiyimi', slug: 'ayollar-kiyimi' },
+  breadcrumbs: [
+    { id: 'c1', name: 'Kiyim', slug: 'kiyim' },
+    { id: 'c2', name: 'Ayollar kiyimi', slug: 'ayollar-kiyimi' },
+  ],
+  seller: { id: 's1', shop_name: "Marg'ilon atlas", slug: 'margilon-atlas', is_verified: true },
+  image_url: null,
   images: [],
+  created_at: '2026-09-01T08:00:00Z',
+  updated_at: '2026-09-20T08:00:00Z',
   variants: [
     {
       id: 'v1',
@@ -128,5 +135,61 @@ describe('ProductPage', () => {
     expect(
       await screen.findByRole('heading', { level: 1, name: "Paxta ko'ylak" }),
     ).toBeInTheDocument()
+  })
+
+  it('shows the full category path from breadcrumbs', async () => {
+    setup()
+    const trail = await screen.findByRole('navigation', { name: "Sahifa yo'li" })
+    expect(within(trail).getByRole('link', { name: 'Kiyim' })).toHaveAttribute(
+      'href',
+      '/catalog/kiyim',
+    )
+    expect(within(trail).getByRole('link', { name: 'Ayollar kiyimi' })).toHaveAttribute(
+      'href',
+      '/catalog/ayollar-kiyimi',
+    )
+    expect(within(trail).getByText("Paxta ko'ylak")).toHaveAttribute('aria-current', 'page')
+  })
+
+  it('limits the quantity to the available units and marks verified shops', async () => {
+    const u = userEvent.setup()
+    setup()
+    const stepper = await screen.findByRole('spinbutton', { name: 'Soni' })
+    expect(stepper).toHaveAttribute('aria-valuemax', '3')
+    expect(screen.getByText("Ko'pi bilan 3 ta")).toBeInTheDocument()
+    const increase = screen.getByRole('button', { name: "Ko'paytirish" })
+    await u.click(increase)
+    await u.click(increase)
+    expect(stepper).toHaveValue('3')
+    expect(increase).toBeDisabled()
+    expect(screen.getAllByRole('img', { name: "Tasdiqlangan do'kon" }).length).toBeGreaterThan(0)
+  })
+
+  it('treats in_stock variants with no available units as sold out', async () => {
+    const reserved = {
+      ...product,
+      variants: [{ ...product.variants[0]!, in_stock: true, available: 0 }],
+    }
+    setup({ 'GET /api/catalog/products/paxta-koylak/': () => json(200, reserved) })
+    expect(await screen.findByText('Tugagan', { selector: 'p' })).toBeInTheDocument()
+    expect(screen.getByRole('spinbutton', { name: 'Soni' })).toBeDisabled()
+  })
+
+  it('handles products without prices and images that are still processing', async () => {
+    const draft = {
+      ...product,
+      variants: [],
+      min_price_tiyin: null,
+      max_price_tiyin: null,
+      images: [
+        { id: 'i1', thumb_url: null, medium_url: null, large_url: null, position: 0 },
+        { id: 'i2', thumb_url: 'https://img.test/t.jpg', medium_url: null, large_url: null },
+      ],
+    }
+    setup({ 'GET /api/catalog/products/paxta-koylak/': () => json(200, draft) })
+    expect(await screen.findByText('Narxi hali belgilanmagan')).toBeInTheDocument()
+    const image = screen.getByRole('img', { name: /1-rasm/ })
+    expect(image).toHaveAttribute('src', 'https://img.test/t.jpg')
+    expect(image).not.toHaveAttribute('srcset')
   })
 })

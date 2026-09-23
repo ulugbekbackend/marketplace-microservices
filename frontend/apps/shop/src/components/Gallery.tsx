@@ -3,10 +3,11 @@ import { cn } from '@bozorcha/ui'
 import { ImageOff } from 'lucide-react'
 import { useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { useTranslation } from 'react-i18next'
+import { displayImages, largeSrc, thumbSrc } from '../lib/images'
 
 export function Gallery({ images, title }: { images: ProductImage[]; title: string }) {
   const { t } = useTranslation()
-  const sorted = useMemo(() => [...images].sort((a, b) => a.position - b.position), [images])
+  const sorted = useMemo(() => displayImages(images), [images])
   const [index, setIndex] = useState(0)
   const thumbRefs = useRef<Array<HTMLButtonElement | null>>([])
   const active = sorted[Math.min(index, sorted.length - 1)]
@@ -36,8 +37,12 @@ export function Gallery({ images, title }: { images: ProductImage[]; title: stri
       <div className="overflow-hidden rounded-xl border border-border bg-surface">
         <img
           key={active.id}
-          src={active.large_url}
-          srcSet={`${active.medium_url} 600w, ${active.large_url} 1200w`}
+          src={largeSrc(active) ?? undefined}
+          srcSet={
+            active.medium_url && active.large_url
+              ? `${active.medium_url} 600w, ${active.large_url} 1200w`
+              : undefined
+          }
           sizes="(min-width: 1024px) 55vw, 100vw"
           alt={t('product.imageAlt', { title, index: index + 1 })}
           width={1200}
@@ -68,7 +73,12 @@ export function Gallery({ images, title }: { images: ProductImage[]; title: stri
                 i === index ? 'border-primary' : 'border-transparent hover:border-border-strong',
               )}
             >
-              <img src={image.thumb_url} alt="" loading="lazy" className="size-full object-cover" />
+              <img
+                src={thumbSrc(image) ?? undefined}
+                alt=""
+                loading="lazy"
+                className="size-full object-cover"
+              />
             </button>
           ))}
         </div>

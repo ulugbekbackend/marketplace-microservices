@@ -1,5 +1,5 @@
-import { useProduct, useShop, type ProductDetail } from '@bozorcha/api-client'
-import { Button, formatPrice, PriceTag, Skeleton, useToast } from '@bozorcha/ui'
+import { useProduct, useShop, type ProductDetail, type ProductVariant } from '@bozorcha/api-client'
+import { Button, cn, formatPrice, PriceTag, QtyStepper, Skeleton, useToast } from '@bozorcha/ui'
 import { CircleCheck, CircleX, ShoppingCart, TriangleAlert } from 'lucide-react'
 import { useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -10,10 +10,12 @@ import { QueryError } from '../components/QueryError'
 import { isNotFound } from '../lib/errors'
 import { ShopCard } from '../components/ShopCard'
 import { VariantSelector } from '../components/VariantSelector'
-import { findVariant, initialSelection, type Selection } from '../lib/variants'
+import { findVariant, initialSelection, isBuyable, type Selection } from '../lib/variants'
 import { NotFoundPage } from './NotFoundPage'
 
 const LOW_STOCK = 5
+/** Per-line quantity limit, also bounded by the variant's `available` units. */
+const MAX_QTY = 99
 
 export function ProductPage() {
   const { t } = useTranslation()
@@ -46,6 +48,14 @@ function ProductView({ product }: { product: ProductDetail }) {
   const [selection, setSelection] = useState<Selection>(() => initialSelection(product.variants))
   const variant = findVariant(product.variants, selection)
   const cartHintId = useId()
+  const [quantity, setQuantity] = useState(1)
+  const buyable = variant !== undefined && isBuyable(variant)
+  const maxQty = buyable ? Math.min(variant.available, MAX_QTY) : 1
+  // Switching to a variant with fewer units left clamps the chosen quantity.
+  const qty = Math.min(quantity, maxQty)
+  // Server-side category path, root first; older payloads without it fall back to the leaf.
+  const categoryPath = product.breadcrumbs.length > 0 ? product.breadcrumbs : [product.category]
+  const description = product.description?.trim() ?? ''
 
   return (
     <div className="page-container flex flex-col gap-5 pt-5 sm:pt-6">
@@ -53,7 +63,7 @@ function ProductView({ product }: { product: ProductDetail }) {
       <Breadcrumbs
         items={[
           { label: t('catalog.title'), href: '/catalog' },
-          { label: product.category.name, href: `/catalog/${product.category.slug}` },
+          ...categoryPath.map((c) => ({ label: c.name, href: `/catalog/${c.slug}` })),
           { label: product.title },
         ]}
       />
@@ -69,19 +79,17 @@ function ProductView({ product }: { product: ProductDetail }) {
           <div className="flex flex-col gap-2" aria-live="polite">
             {variant ? (
               <PriceTag price={variant.price_tiyin} size="lg" />
+            ) : product.min_price_tiyin === null ? (
+              <p className="text-lg font-medium text-text-muted">{t('product.noPrice')}</p>
             ) : (
               <p className="font-heading text-2xl font-extrabold text-accent-ink tabular sm:text-3xl">
-                {product.min_price_tiyin === product.max_price_tiyin
+                {product.max_price_tiyin === null ||
+                product.max_price_tiyin === product.min_price_tiyin
                   ? formatPrice(product.min_price_tiyin)
                   : `${formatPrice(product.min_price_tiyin)} – ${formatPrice(product.max_price_tiyin)}`}
               </p>
             )}
-            <StockLine
-              product={product}
-              variantAvailable={variant?.available}
-              variantInStock={variant?.in_stock}
-              hasVariant={Boolean(variant)}
-            />
+            <StockLine productInStock={product.in_stock} variant={variant} />
             {variant && (
               <p className="text-xs text-text-muted tabular">
                 {t('product.sku', { sku: variant.sku })}
@@ -96,6 +104,24 @@ function ProductView({ product }: { product: ProductDetail }) {
           />
 
           <div className="flex flex-col gap-2">
+            <div className="flex flex-wrap items-center gap-3">
+              <QtyStepper
+                value={qty}
+                onChange={setQuantity}
+                max={maxQty}
+                disabled={!buyable}
+                labels={{
+                  group: t('product.quantity'),
+                  decrease: t('product.decrease'),
+                  increase: t('product.increase'),
+                }}
+              />
+              {buyable && maxQty < MAX_QTY && (
+                <span className="text-sm text-text-muted tabular">
+                  {t('product.maxQuantity', { count: maxQty })}
+                </span>
+              )}
+            </div>
             <Button
               variant="accent"
               size="lg"
@@ -119,6 +145,7 @@ function ProductView({ product }: { product: ProductDetail }) {
             name={product.seller.shop_name}
             slug={product.seller.slug}
             label={t('product.seller')}
+            verified={product.seller.is_verified}
             productCount={shop.data?.product_count}
             createdAt={shop.data?.created_at}
           />
@@ -129,9 +156,9 @@ function ProductView({ product }: { product: ProductDetail }) {
         <h2 id="product-description" className="font-heading text-xl font-bold text-text">
           {t('product.description')}
         </h2>
-        {product.description.trim() ? (
+        {description ? (
           <p className="text-base leading-relaxed whitespace-pre-line text-text [overflow-wrap:anywhere]">
-            {product.description}
+            {description}
           </p>
         ) : (
           <p className="text-text-muted">{t('product.noDescription')}</p>
@@ -142,26 +169,22 @@ function ProductView({ product }: { product: ProductDetail }) {
 }
 
 function StockLine({
-  product,
-  hasVariant,
-  variantInStock,
-  variantAvailable,
+  productInStock,
+  variant,
 }: {
-  product: ProductDetail
-  hasVariant: boolean
-  variantInStock?: boolean
-  variantAvailable?: number
+  productInStock: boolean
+  variant: ProductVariant | undefined
 }) {
   const { t } = useTranslation()
-  if (!hasVariant) {
+  if (!variant) {
     return (
       <p className="flex items-center gap-1.5 text-sm text-text-muted">
         <TriangleAlert aria-hidden="true" size={16} strokeWidth={1.75} />
-        {product.in_stock ? t('product.unavailableCombo') : t('product.outOfStock')}
+        {productInStock ? t('product.unavailableCombo') : t('product.outOfStock')}
       </p>
     )
   }
-  if (!variantInStock || !variantAvailable) {
+  if (!isBuyable(variant)) {
     return (
       <p className="flex items-center gap-1.5 text-sm font-medium text-danger-ink">
         <CircleX aria-hidden="true" size={16} strokeWidth={1.75} />
@@ -169,10 +192,13 @@ function StockLine({
       </p>
     )
   }
-  const low = variantAvailable <= LOW_STOCK
+  const low = variant.available <= LOW_STOCK
   return (
     <p
-      className={`flex items-center gap-1.5 text-sm font-medium tabular ${low ? 'text-accent-ink' : 'text-success-ink'}`}
+      className={cn(
+        'flex items-center gap-1.5 text-sm font-medium tabular',
+        low ? 'text-accent-ink' : 'text-success-ink',
+      )}
     >
       {low ? (
         <TriangleAlert aria-hidden="true" size={16} strokeWidth={1.75} />
@@ -180,8 +206,8 @@ function StockLine({
         <CircleCheck aria-hidden="true" size={16} strokeWidth={1.75} />
       )}
       {low
-        ? t('product.lowStock', { count: variantAvailable })
-        : t('product.available', { count: variantAvailable })}
+        ? t('product.lowStock', { count: variant.available })
+        : t('product.available', { count: variant.available })}
     </p>
   )
 }

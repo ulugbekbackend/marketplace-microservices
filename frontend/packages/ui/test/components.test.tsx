@@ -55,7 +55,7 @@ describe('ProductCard', () => {
     imageUrl: null,
     minPrice: 120_000_00,
     sellerName: 'Rishton sopol',
-    labels: { outOfStock: 'Tugagan', from: 'dan' },
+    labels: { outOfStock: 'Tugagan', from: 'dan', noPrice: "Narxi yo'q" },
   }
 
   it('is a single link with title, price and seller', () => {
@@ -73,6 +73,12 @@ describe('ProductCard', () => {
     render(<ProductCard {...base} maxPrice={150_000_00} inStock={false} />)
     expect(screen.getByText('dan')).toBeInTheDocument()
     expect(screen.getByText('Tugagan')).toBeInTheDocument()
+  })
+
+  it('shows a placeholder when the product has no price', () => {
+    render(<ProductCard {...base} minPrice={null} maxPrice={null} inStock={false} />)
+    expect(screen.getByText("Narxi yo'q")).toBeInTheDocument()
+    expect(screen.queryByTestId('price')).not.toBeInTheDocument()
   })
 
   it('uses a custom link component', () => {

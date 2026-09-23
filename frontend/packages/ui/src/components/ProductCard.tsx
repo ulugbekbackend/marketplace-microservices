@@ -8,16 +8,18 @@ export type ProductCardProps = {
   href: string
   title: string
   imageUrl: string | null
-  /** Lowest variant price, integer tiyin. */
-  minPrice: number
+  /** Lowest variant price, integer tiyin; null when the product has no priced variant. */
+  minPrice: number | null
   /** Highest variant price; when it differs from minPrice the card shows "from". */
-  maxPrice?: number
+  maxPrice?: number | null
   sellerName?: string
   inStock: boolean
   labels: {
     outOfStock: string
     /** Suffix for price ranges, e.g. "dan". */
     from: string
+    /** Shown instead of a price when minPrice is null. */
+    noPrice: string
   }
   /** Router-aware link (e.g. an adapter around React Router's Link). Defaults to `<a>`. */
   linkAs?: LinkComponent
@@ -36,7 +38,7 @@ export function ProductCard({
   linkAs: LinkAs = DefaultLink,
   className,
 }: ProductCardProps) {
-  const hasRange = maxPrice !== undefined && maxPrice > minPrice
+  const hasRange = minPrice !== null && maxPrice != null && maxPrice > minPrice
   return (
     <article
       className={cn(
@@ -69,7 +71,11 @@ export function ProductCard({
         )}
       </div>
       <div className="flex flex-1 flex-col gap-1.5 p-3">
-        <PriceTag price={minPrice} size="sm" suffix={hasRange ? labels.from : undefined} />
+        {minPrice === null ? (
+          <p className="text-sm font-medium text-text-muted">{labels.noPrice}</p>
+        ) : (
+          <PriceTag price={minPrice} size="sm" suffix={hasRange ? labels.from : undefined} />
+        )}
         <h3 className="line-clamp-2 min-h-[2.5rem] text-sm leading-5 font-medium text-text [overflow-wrap:anywhere]">
           {/* The link's pseudo-element stretches over the whole card: one tab stop per product. */}
           <LinkAs

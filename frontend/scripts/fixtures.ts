@@ -71,7 +71,7 @@ export const categories = [
 ]
 
 const sellers = {
-  atlas: { id: 's1', shop_name: "Marg'ilon atlas", slug: 'margilon-atlas' },
+  atlas: { id: 's1', shop_name: "Marg'ilon atlas", slug: 'margilon-atlas', is_verified: true },
   rishton: { id: 's2', shop_name: 'Rishton sopol ustaxonasi', slug: 'rishton-sopol' },
   tech: { id: 's3', shop_name: 'Chilonzor Texno', slug: 'chilonzor-texno' },
   bolajon: { id: 's4', shop_name: 'Bolajon', slug: 'bolajon' },
@@ -107,6 +107,8 @@ export const products = [
   max_price_tiyin: so(max as number),
   in_stock: inStock as boolean,
   image_url: img(i),
+  category: { id: 'c-kiyim', name: 'Kiyim va poyabzal', slug: 'kiyim' },
+  created_at: '2026-09-01T08:00:00Z',
   seller: seller as (typeof sellers)['atlas'],
 }))
 
@@ -124,8 +126,8 @@ const variant = (
   available,
   in_stock: available > 0,
   attributes: [
-    { code: 'color', name: 'Rang', value: color },
-    { code: 'size', name: "O'lcham", value: size },
+    { code: 'color', name: 'Rang', value: color, value_id: `color-${color}` },
+    { code: 'size', name: "O'lcham", value: size, value_id: `size-${size}` },
   ],
 })
 
@@ -136,6 +138,13 @@ export const productDetail = {
   description:
     "Marg'ilon ustalari to'qigan tabiiy ipak atlasdan tikilgan ko'ylak. Yengil, havo o'tkazadi, yozgi to'y va bayramlar uchun mos.\n\nTarkibi: 100% ipak. Faqat qo'lda, sovuq suvda yuving.",
   category: { id: 'c-ayollar', name: 'Ayollar kiyimi', slug: 'ayollar-kiyimi' },
+  breadcrumbs: [
+    { id: 'c-kiyim', name: 'Kiyim va poyabzal', slug: 'kiyim' },
+    { id: 'c-ayollar', name: 'Ayollar kiyimi', slug: 'ayollar-kiyimi' },
+  ],
+  image_url: img(0),
+  created_at: '2026-09-01T08:00:00Z',
+  updated_at: '2026-09-20T08:00:00Z',
   seller: sellers.atlas,
   images: [0, 3, 5, 8].map((n, position) => ({
     id: `img${position}`,
@@ -162,5 +171,6 @@ export const shop = {
   shop_name: "Marg'ilon atlas",
   slug: 'margilon-atlas',
   product_count: 48,
+  is_verified: true,
   created_at: '2024-04-12T08:00:00Z',
 }

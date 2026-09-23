@@ -72,6 +72,11 @@ export const uz = {
   },
   product: {
     from: 'dan',
+    noPrice: 'Narxi hali belgilanmagan',
+    quantity: 'Soni',
+    decrease: 'Kamaytirish',
+    increase: "Ko'paytirish",
+    maxQuantity: "Ko'pi bilan {{count}} ta",
     outOfStock: 'Tugagan',
     inStock: 'Sotuvda bor',
     available: 'Omborda: {{count}} ta',
@@ -97,6 +102,7 @@ export const uz = {
   shop: {
     notFound: "Do'kon topilmadi",
     notFoundHint: 'Havolani tekshiring yoki bosh sahifadan qidiring.',
+    verified: "Tasdiqlangan do'kon",
     since: '{{year}}-yildan beri Bozorchada',
     products: "Do'kon mahsulotlari",
     empty: "Do'konda hozircha mahsulot yo'q",

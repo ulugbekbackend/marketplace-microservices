@@ -21,8 +21,8 @@ const v = (
   available,
   in_stock: available > 0,
   attributes: [
-    { code: 'color', name: 'Rang', value: color },
-    { code: 'size', name: "O'lcham", value: size },
+    { code: 'color', name: 'Rang', value: color, value_id: `color-${color}` },
+    { code: 'size', name: "O'lcham", value: size, value_id: `size-${size}` },
   ],
 })
 

@@ -1,16 +1,18 @@
 /**
- * API contract types.
+ * API contract types, aliased from the generated OpenAPI schemas.
  *
- * Hand-written to match the service contracts until the OpenAPI schemas are published.
- * `pnpm gen-api` writes `src/generated/<service>.ts` from `openapi/<service>.json`; once a
- * service's schema exists, replace the matching block below with aliases to the generated
- * schema, e.g.
- *
- *   import type { components } from './generated/catalog'
- *   export type ProductListItem = components['schemas']['ProductListItem']
- *
- * Consumers import only these names, so swapping the source does not touch app code.
+ * `pnpm gen-api` writes `src/generated/<service>.ts` from `openapi/<service>.json`. App code
+ * imports only the names below, so a schema change surfaces as a compile error here or at the
+ * use site instead of a silent runtime mismatch.
  */
+import type { components as AuthComponents } from './generated/auth'
+import type {
+  components as CatalogComponents,
+  operations as CatalogOperations,
+} from './generated/catalog'
+
+type AuthSchemas = AuthComponents['schemas']
+type CatalogSchemas = CatalogComponents['schemas']
 
 /* ------------------------------------------------------------------ shared */
 
@@ -21,6 +23,7 @@ export type Tiyin = number
 /** ISO 8601 UTC timestamp. */
 export type IsoDateTime = string
 
+/** The shared list envelope; every `Paginated*List` schema has this shape. */
 export type Paginated<T> = {
   items: T[]
   total: number
@@ -28,117 +31,39 @@ export type Paginated<T> = {
   page_size: number
 }
 
-export type ErrorBody = {
-  error: {
-    code: string
-    message: string
-    details?: unknown
-  }
-}
+/** The shared error shape: `{"error": {"code", "message", "details"}}`. */
+export type ErrorBody = AuthSchemas['Error']
 
 /* -------------------------------------------------------------------- auth */
 
-export type UserRole = 'customer' | 'seller' | 'admin'
+export type User = AuthSchemas['User']
+export type UserRole = AuthSchemas['RoleEnum']
 
-export type User = {
-  id: Uuid
-  phone: string
-  full_name: string
-  role: UserRole
-}
+export type OtpSendRequest = AuthSchemas['OtpSendRequest']
+export type OtpVerifyRequest = AuthSchemas['OtpVerifyRequest']
+export type OtpVerifyResponse = AuthSchemas['Login']
+export type TokenRefreshRequest = AuthSchemas['RefreshRequest']
+export type TokenRefreshResponse = AuthSchemas['TokenPair']
+export type LogoutRequest = AuthSchemas['RefreshRequest']
+export type UserUpdateRequest = AuthSchemas['PatchedUserUpdateRequest']
 
-export type OtpSendRequest = { phone: string }
-export type OtpVerifyRequest = { phone: string; code: string }
-export type OtpVerifyResponse = { access: string; refresh: string; user: User }
-export type TokenRefreshRequest = { refresh: string }
-export type TokenRefreshResponse = { access: string; refresh: string }
-export type LogoutRequest = { refresh: string }
-export type UserUpdateRequest = { full_name: string }
-
-/** Error codes returned by the OTP endpoints. */
+/** Error codes returned by the OTP endpoints (codes are not part of the OpenAPI schema). */
 export type AuthErrorCode =
   'OTP_INVALID' | 'OTP_EXPIRED' | 'OTP_BLOCKED' | 'OTP_RATE_LIMITED' | 'INVALID_PHONE'
 
 /* ----------------------------------------------------------------- catalog */
 
-export type Category = {
-  id: Uuid
-  name: string
-  slug: string
-  children: Category[]
-}
+export type Category = CatalogSchemas['CategoryNode']
+export type CategoryRef = CatalogSchemas['CategoryRef']
+export type SellerRef = CatalogSchemas['SellerCard']
 
-export type CategoryRef = {
-  id: Uuid
-  name: string
-  slug: string
-}
+export type ProductListItem = CatalogSchemas['ProductCard']
+export type ProductImage = CatalogSchemas['Image']
+export type VariantAttribute = CatalogSchemas['VariantAttribute']
+export type ProductVariant = CatalogSchemas['PublicVariant']
+export type ProductDetail = CatalogSchemas['ProductDetail']
+export type ProductListParams = NonNullable<
+  CatalogOperations['products_list']['parameters']['query']
+>
 
-export type SellerRef = {
-  id: Uuid
-  shop_name: string
-  slug: string
-}
-
-export type ProductListItem = {
-  id: Uuid
-  title: string
-  slug: string
-  min_price_tiyin: Tiyin
-  max_price_tiyin: Tiyin
-  in_stock: boolean
-  image_url: string | null
-  seller: SellerRef
-}
-
-export type ProductImage = {
-  id: Uuid
-  thumb_url: string
-  medium_url: string
-  large_url: string
-  position: number
-}
-
-export type VariantAttribute = {
-  code: string
-  name: string
-  value: string
-}
-
-export type ProductVariant = {
-  id: Uuid
-  sku: string
-  price_tiyin: Tiyin
-  available: number
-  in_stock: boolean
-  attributes: VariantAttribute[]
-}
-
-export type ProductDetail = {
-  id: Uuid
-  title: string
-  slug: string
-  description: string
-  category: CategoryRef
-  seller: SellerRef
-  images: ProductImage[]
-  variants: ProductVariant[]
-  min_price_tiyin: Tiyin
-  max_price_tiyin: Tiyin
-  in_stock: boolean
-}
-
-export type ProductListParams = {
-  category?: string
-  seller?: string
-  page?: number
-  page_size?: number
-}
-
-export type Shop = {
-  id: Uuid
-  shop_name: string
-  slug: string
-  product_count: number
-  created_at: IsoDateTime
-}
+export type Shop = CatalogSchemas['Shop']
