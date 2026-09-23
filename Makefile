@@ -40,8 +40,9 @@ migrate: ## Apply database migrations in running containers
 	@for s in auth catalog order; do $(COMPOSE) exec -T $$s python manage.py migrate --noinput; done
 	$(COMPOSE) exec -T payment alembic upgrade head
 
-seed: ## Load demo data
-	$(COMPOSE) exec -T catalog python -m tools.seed
+seed: ## Load demo data (users, shops, categories, products); safe to repeat
+	$(COMPOSE) exec -T auth python manage.py seed_users
+	$(COMPOSE) exec -T catalog python manage.py seed_catalog
 
 reindex: ## Rebuild the search index from the catalog
 	$(COMPOSE) exec -T search python -m app.reindex
