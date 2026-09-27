@@ -43,5 +43,6 @@ http:
           - "http://seller.localhost"
         accessControlAllowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"]
         accessControlAllowHeaders: ["Authorization", "Content-Type", "Idempotency-Key"]
+        accessControlExposeHeaders: ["Idempotent-Replayed", "X-Request-Id"]
         accessControlAllowCredentials: true
         accessControlMaxAge: 600

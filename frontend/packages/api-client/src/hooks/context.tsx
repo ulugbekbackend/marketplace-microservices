@@ -1,18 +1,26 @@
 import { createContext, useContext, useMemo, useSyncExternalStore, type ReactNode } from 'react'
 import type { ApiClient } from '../client'
-import { authEndpoints, catalogEndpoints } from '../endpoints'
+import { authEndpoints, cartEndpoints, catalogEndpoints, orderEndpoints } from '../endpoints'
 
 type ApiContextValue = {
   client: ApiClient
   auth: ReturnType<typeof authEndpoints>
   catalog: ReturnType<typeof catalogEndpoints>
+  cart: ReturnType<typeof cartEndpoints>
+  orders: ReturnType<typeof orderEndpoints>
 }
 
 const ApiContext = createContext<ApiContextValue | null>(null)
 
 export function ApiProvider({ client, children }: { client: ApiClient; children: ReactNode }) {
   const value = useMemo(
-    () => ({ client, auth: authEndpoints(client), catalog: catalogEndpoints(client) }),
+    () => ({
+      client,
+      auth: authEndpoints(client),
+      catalog: catalogEndpoints(client),
+      cart: cartEndpoints(client),
+      orders: orderEndpoints(client),
+    }),
     [client],
   )
   return <ApiContext.Provider value={value}>{children}</ApiContext.Provider>

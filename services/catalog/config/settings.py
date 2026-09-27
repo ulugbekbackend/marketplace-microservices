@@ -91,6 +91,9 @@ S3_REGION = config("S3_REGION", default="us-east-1")
 IMAGE_MAX_UPLOAD_BYTES = config("IMAGE_MAX_UPLOAD_BYTES", default=10 * 1024 * 1024, cast=int)
 IMAGE_UPLOAD_URL_TTL_SECONDS = config("IMAGE_UPLOAD_URL_TTL_SECONDS", default=600, cast=int)
 
+# How long stock stays held for an unpaid order.
+RESERVATION_TTL_SECONDS = config("RESERVATION_TTL_SECONDS", default=15 * 60, cast=int)
+
 # Celery: Redis db 1 as the broker, results are not stored.
 CELERY_BROKER_URL = config("CELERY_BROKER_URL", default="redis://redis:6379/1")
 CELERY_TASK_ALWAYS_EAGER = config("CELERY_TASK_ALWAYS_EAGER", default=False, cast=bool)

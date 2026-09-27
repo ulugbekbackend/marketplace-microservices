@@ -1,9 +1,21 @@
-import { useProduct, useShop, type ProductDetail, type ProductVariant } from '@bozorcha/api-client'
+import {
+  findCartItem,
+  useAddToCart,
+  useCart,
+  useFavorites,
+  useProduct,
+  useSession,
+  useShop,
+  useToggleFavorite,
+  type ProductDetail,
+  type ProductVariant,
+} from '@bozorcha/api-client'
 import { Button, cn, formatPrice, PriceTag, QtyStepper, Skeleton, useToast } from '@bozorcha/ui'
-import { CircleCheck, CircleX, ShoppingCart, TriangleAlert } from 'lucide-react'
+import { CircleAlert, CircleCheck, CircleX, Heart, ShoppingCart, TriangleAlert } from 'lucide-react'
 import { useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useParams } from 'react-router'
+import { Link, useLocation, useParams } from 'react-router'
+import { cartErrorMessage } from '../lib/cartErrors'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { Gallery } from '../components/Gallery'
 import { QueryError } from '../components/QueryError'
@@ -43,11 +55,9 @@ export function ProductPage() {
 
 function ProductView({ product }: { product: ProductDetail }) {
   const { t } = useTranslation()
-  const { toast } = useToast()
   const shop = useShop(product.seller.slug)
   const [selection, setSelection] = useState<Selection>(() => initialSelection(product.variants))
   const variant = findVariant(product.variants, selection)
-  const cartHintId = useId()
   const [quantity, setQuantity] = useState(1)
   const buyable = variant !== undefined && isBuyable(variant)
   const maxQty = buyable ? Math.min(variant.available, MAX_QTY) : 1
@@ -72,9 +82,12 @@ function ProductView({ product }: { product: ProductDetail }) {
         <Gallery images={product.images} title={product.title} />
 
         <div className="flex min-w-0 flex-col gap-5 lg:sticky lg:top-36 lg:self-start">
-          <h1 className="font-heading text-2xl leading-tight font-extrabold tracking-tight text-text [overflow-wrap:anywhere] sm:text-3xl">
-            {product.title}
-          </h1>
+          <div className="flex items-start justify-between gap-3">
+            <h1 className="font-heading text-2xl leading-tight font-extrabold tracking-tight text-text [overflow-wrap:anywhere] sm:text-3xl">
+              {product.title}
+            </h1>
+            <FavoriteButton productId={product.id} />
+          </div>
 
           <div className="flex flex-col gap-2" aria-live="polite">
             {variant ? (
@@ -103,43 +116,14 @@ function ProductView({ product }: { product: ProductDetail }) {
             onChange={setSelection}
           />
 
-          <div className="flex flex-col gap-2">
-            <div className="flex flex-wrap items-center gap-3">
-              <QtyStepper
-                value={qty}
-                onChange={setQuantity}
-                max={maxQty}
-                disabled={!buyable}
-                labels={{
-                  group: t('product.quantity'),
-                  decrease: t('product.decrease'),
-                  increase: t('product.increase'),
-                }}
-              />
-              {buyable && maxQty < MAX_QTY && (
-                <span className="text-sm text-text-muted tabular">
-                  {t('product.maxQuantity', { count: maxQty })}
-                </span>
-              )}
-            </div>
-            <Button
-              variant="accent"
-              size="lg"
-              fullWidth
-              aria-disabled="true"
-              aria-describedby={cartHintId}
-              title={t('product.cartSoon')}
-              leadingIcon={<ShoppingCart aria-hidden="true" size={20} strokeWidth={1.75} />}
-              onClick={() =>
-                toast({ title: t('product.cartSoon'), description: t('product.cartSoonHint') })
-              }
-            >
-              {t('product.addToCart')}
-            </Button>
-            <p id={cartHintId} className="text-center text-xs text-text-muted">
-              {t('product.cartSoon')}
-            </p>
-          </div>
+          <AddToCart
+            product={product}
+            variant={variant}
+            buyable={buyable}
+            qty={qty}
+            maxQty={maxQty}
+            onQtyChange={setQuantity}
+          />
 
           <ShopCard
             name={product.seller.shop_name}
@@ -165,6 +149,188 @@ function ProductView({ product }: { product: ProductDetail }) {
         )}
       </section>
     </div>
+  )
+}
+
+type AddToCartProps = {
+  product: ProductDetail
+  variant: ProductVariant | undefined
+  buyable: boolean
+  qty: number
+  maxQty: number
+  onQtyChange: (qty: number) => void
+}
+
+function AddToCart({ product, variant, buyable, qty, maxQty, onQtyChange }: AddToCartProps) {
+  const { t } = useTranslation()
+  const { toast } = useToast()
+  const cart = useCart()
+  const add = useAddToCart()
+  // The error belongs to the variant it was raised for; switching variants hides it.
+  const [error, setError] = useState<{ variantId: string; message: string } | null>(null)
+  const hintId = useId()
+  const errorId = useId()
+  const shownError = error && error.variantId === variant?.id ? error.message : null
+  const inCart = variant ? findCartItem(cart.data, variant.id) : undefined
+
+  const onAdd = () => {
+    if (!variant || !buyable) return
+    setError(null)
+    add.mutate(
+      { variantId: variant.id, qty },
+      {
+        onSuccess: () =>
+          toast({
+            title: t('product.addedToCart'),
+            description: t('product.addedToCartHint', { title: product.title, count: qty }),
+            tone: 'success',
+          }),
+        onError: (err) => setError({ variantId: variant.id, message: cartErrorMessage(t, err) }),
+      },
+    )
+  }
+
+  const describedBy = [shownError && errorId, !buyable && hintId].filter(Boolean).join(' ')
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <QtyStepper
+          value={qty}
+          onChange={(value) => {
+            setError(null)
+            onQtyChange(value)
+          }}
+          max={maxQty}
+          disabled={!buyable}
+          labels={{
+            group: t('product.quantity'),
+            decrease: t('product.decrease'),
+            increase: t('product.increase'),
+          }}
+        />
+        {buyable && maxQty < MAX_QTY && (
+          <span className="text-sm text-text-muted tabular">
+            {t('product.maxQuantity', { count: maxQty })}
+          </span>
+        )}
+      </div>
+      <Button
+        variant="accent"
+        size="lg"
+        fullWidth
+        disabled={!buyable}
+        loading={add.isPending}
+        aria-describedby={describedBy || undefined}
+        leadingIcon={<ShoppingCart aria-hidden="true" size={20} strokeWidth={1.75} />}
+        onClick={onAdd}
+      >
+        {t('product.addToCart')}
+      </Button>
+      {!buyable && (
+        <p id={hintId} className="text-center text-sm text-text-muted">
+          {t('product.unavailableHint')}
+        </p>
+      )}
+      {shownError && (
+        <p
+          id={errorId}
+          role="alert"
+          className="flex items-start gap-2 rounded-lg bg-danger-soft px-3 py-2.5 text-sm text-danger-ink"
+        >
+          <CircleAlert aria-hidden="true" size={18} strokeWidth={1.75} className="mt-px shrink-0" />
+          <span>{shownError}</span>
+        </p>
+      )}
+      {inCart && (
+        <p
+          className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-text"
+          aria-live="polite"
+        >
+          <CircleCheck
+            aria-hidden="true"
+            size={16}
+            strokeWidth={1.75}
+            className="shrink-0 text-success-ink"
+          />
+          <span className="tabular">{t('product.inCart', { count: inCart.qty })}</span>
+          <Link
+            to="/cart"
+            className="rounded-sm font-semibold text-primary hover:underline focus-ring"
+          >
+            {t('product.goToCart')}
+          </Link>
+        </p>
+      )}
+    </div>
+  )
+}
+
+const iconButtonClass =
+  'grid size-11 shrink-0 place-items-center rounded-lg border border-border bg-surface transition-colors duration-150 ease-out hover:bg-surface-2 focus-ring'
+
+/** Heart toggle for signed-in users; guests are sent to login and brought back here. */
+function FavoriteButton({ productId }: { productId: string }) {
+  const { t } = useTranslation()
+  const { isAuthenticated } = useSession()
+  const location = useLocation()
+  if (!isAuthenticated) {
+    const next = encodeURIComponent(`${location.pathname}${location.search}`)
+    return (
+      <Link
+        to={`/login?next=${next}`}
+        aria-label={t('product.favoriteLogin')}
+        title={t('product.favoriteLogin')}
+        className={cn(iconButtonClass, 'text-text-muted hover:text-text')}
+      >
+        <Heart aria-hidden="true" size={20} strokeWidth={1.75} />
+      </Link>
+    )
+  }
+  return <SignedInFavoriteButton productId={productId} />
+}
+
+function SignedInFavoriteButton({ productId }: { productId: string }) {
+  const { t } = useTranslation()
+  const { toast } = useToast()
+  const favorites = useFavorites()
+  const toggle = useToggleFavorite()
+  const active = favorites.data?.items.includes(productId) ?? false
+
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      aria-label={t('product.favoriteAdd')}
+      title={active ? t('product.favoriteRemove') : t('product.favoriteAdd')}
+      disabled={favorites.isPending}
+      onClick={() =>
+        toggle.mutate(
+          { productId, favorite: !active },
+          {
+            onSuccess: () =>
+              toast({
+                title: active ? t('product.favoriteRemoved') : t('product.favoriteAdded'),
+                tone: 'success',
+                duration: 2500,
+              }),
+            onError: (err) => toast({ title: cartErrorMessage(t, err), tone: 'danger' }),
+          },
+        )
+      }
+      className={cn(
+        iconButtonClass,
+        'disabled:cursor-wait disabled:opacity-60',
+        active ? 'text-danger-ink' : 'text-text-muted hover:text-text',
+      )}
+    >
+      <Heart
+        aria-hidden="true"
+        size={20}
+        strokeWidth={1.75}
+        fill={active ? 'currentColor' : 'none'}
+      />
+    </button>
   )
 }
 

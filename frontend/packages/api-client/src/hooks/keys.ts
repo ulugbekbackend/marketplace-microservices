@@ -1,4 +1,4 @@
-import type { ProductListParams } from '../types'
+import type { OrderListParams, ProductListParams } from '../types'
 
 /** Query key factory: one place to build and invalidate cache keys. */
 export const queryKeys = {
@@ -7,4 +7,13 @@ export const queryKeys = {
   products: (params: ProductListParams) => ['catalog', 'products', params] as const,
   product: (slug: string) => ['catalog', 'product', slug] as const,
   shop: (slug: string) => ['catalog', 'shop', slug] as const,
+  /** The current cart: the guest's (cookie) or, after login and merge, the customer's. */
+  cart: ['cart'] as const,
+  /** Kept outside the `cart` prefix so cart invalidations leave favorites alone. */
+  favorites: ['favorites'] as const,
+  /** Prefix of every order query (list, detail, status). */
+  orders: ['orders'] as const,
+  orderList: (params: OrderListParams) => ['orders', 'list', params] as const,
+  order: (id: string) => ['orders', 'detail', id] as const,
+  orderStatus: (id: string) => ['orders', 'status', id] as const,
 }

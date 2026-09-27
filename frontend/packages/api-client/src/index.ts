@@ -9,7 +9,7 @@ export {
   type Query,
   type RequestOptions,
 } from './client'
-export { authEndpoints, catalogEndpoints } from './endpoints'
+export { authEndpoints, cartEndpoints, catalogEndpoints, orderEndpoints } from './endpoints'
 export {
   ApiError,
   CLIENT_ERROR,
@@ -24,5 +24,29 @@ export * from './types'
 
 export { useCategories, useProduct, useProducts, useShop } from './hooks/catalog'
 export { useLogout, useMe, useSendOtp, useUpdateMe, useVerifyOtp } from './hooks/auth'
+export {
+  EMPTY_CART,
+  findCartItem,
+  useAddToCart,
+  useCart,
+  useClearCart,
+  useFavorites,
+  useMergeCart,
+  useRemoveCartItem,
+  useToggleFavorite,
+  useUpdateCartItem,
+} from './hooks/cart'
+export {
+  isRetryableCheckoutError,
+  ORDER_POLL_INTERVAL_MS,
+  orderPollInterval,
+  useCancelOrder,
+  useCheckout,
+  useMockPay,
+  useOrder,
+  useOrders,
+  useOrderStatus,
+  type CheckoutVars,
+} from './hooks/orders'
 export { ApiProvider, useApi, useSession } from './hooks/context'
 export { queryKeys } from './hooks/keys'

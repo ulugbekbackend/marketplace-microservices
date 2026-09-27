@@ -280,6 +280,7 @@ version = "0.1.0"
 source = { virtual = "services/cart" }
 dependencies = [
     { name = "fastapi" },
+    { name = "httpx" },
     { name = "prometheus-client" },
     { name = "py-common" },
     { name = "python-decouple" },
@@ -289,7 +290,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "httpx" },
+    { name = "fakeredis" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
 ]
@@ -297,6 +298,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = "==0.141.1" },
+    { name = "httpx", specifier = "==0.28.1" },
     { name = "prometheus-client", specifier = "==0.26.0" },
     { name = "py-common", editable = "libs/py-common" },
     { name = "python-decouple", specifier = "==3.8" },
@@ -306,7 +308,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "httpx", specifier = "==0.28.1" },
+    { name = "fakeredis", specifier = "==2.38.0" },
     { name = "pytest", specifier = "==9.1.1" },
     { name = "pytest-asyncio", specifier = "==1.4.0" },
 ]
@@ -1240,14 +1242,18 @@ dependencies = [
     { name = "djangorestframework" },
     { name = "drf-spectacular" },
     { name = "gunicorn" },
+    { name = "httpx" },
     { name = "prometheus-client" },
     { name = "psycopg", extra = ["binary"] },
-    { name = "py-common", extra = ["drf"] },
+    { name = "py-common", extra = ["drf", "redis"] },
     { name = "python-decouple" },
+    { name = "redis" },
 ]
 
 [package.dev-dependencies]
 dev = [
+    { name = "factory-boy" },
+    { name = "fakeredis" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "pytest-django" },
@@ -1259,14 +1265,18 @@ requires-dist = [
     { name = "djangorestframework", specifier = "==3.18.1" },
     { name = "drf-spectacular", specifier = "==0.30.0" },
     { name = "gunicorn", specifier = "==26.2.0" },
+    { name = "httpx", specifier = "==0.28.1" },
     { name = "prometheus-client", specifier = "==0.26.0" },
     { name = "psycopg", extras = ["binary"], specifier = "==3.3.6" },
-    { name = "py-common", extras = ["drf"], editable = "libs/py-common" },
+    { name = "py-common", extras = ["drf", "redis"], editable = "libs/py-common" },
     { name = "python-decouple", specifier = "==3.8" },
+    { name = "redis", specifier = "==8.1.0" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "factory-boy", specifier = "==3.3.3" },
+    { name = "fakeredis", specifier = "==2.38.0" },
     { name = "pytest", specifier = "==9.1.1" },
     { name = "pytest-cov", specifier = "==7.1.0" },
     { name = "pytest-django", specifier = "==4.14.0" },

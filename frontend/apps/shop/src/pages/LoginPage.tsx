@@ -1,4 +1,4 @@
-import { useSendOtp, useSession, useVerifyOtp } from '@bozorcha/api-client'
+import { useMergeCart, useSendOtp, useSession, useVerifyOtp } from '@bozorcha/api-client'
 import { Button, Card, Input, OtpInput, useToast } from '@bozorcha/ui'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { CircleAlert, MessageSquareText, Smartphone } from 'lucide-react'
@@ -196,6 +196,7 @@ function CodeStep({
   const navigate = useNavigate()
   const { toast } = useToast()
   const verify = useVerifyOtp()
+  const mergeCart = useMergeCart()
   const resend = useSendOtp()
   const secondsLeft = useCountdown(resendAt)
   const [apiError, setApiError] = useState<LoginErrorKey | null>(null)
@@ -213,6 +214,10 @@ function CodeStep({
       { phone, code },
       {
         onSuccess: () => {
+          // Move the guest cart into the customer's cart. Fire and forget: the cache is updated
+          // (or refetched on failure) by the hook even after this page unmounts, and a failed
+          // merge must never block the login.
+          mergeCart.mutate()
           toast({ title: t('login.welcome'), tone: 'success' })
           navigate(next, { replace: true })
         },

@@ -12,19 +12,43 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { mkdir } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { chromium, type Page, type Route } from '@playwright/test'
-import { categories, IMAGE_HOST, productDetail, products, productSvg, shop } from './fixtures'
+import {
+  cart,
+  categories,
+  cleanCart,
+  customer,
+  IMAGE_HOST,
+  ORDER_ID,
+  orderList,
+  productDetail,
+  products,
+  productSvg,
+  reservedOrder,
+  shop,
+} from './fixtures'
 
 const PREVIEW_PORT = 4179
 const WIDTHS = [360, 1280] as const
 const THEMES = ['light', 'dark'] as const
 
-type Shot = { name: string; path: string; prepare?: (page: Page) => Promise<void> }
+type Shot = {
+  name: string
+  path: string
+  /** Start with a stored session (the mocked refresh endpoint signs the customer in). */
+  signedIn?: boolean
+  prepare?: (page: Page) => Promise<void>
+}
 
 const SHOTS: Shot[] = [
   { name: 'home', path: '/' },
   { name: 'catalog', path: '/catalog/kiyim' },
   { name: 'product', path: '/p/atlas-koylak' },
   { name: 'shop', path: '/shop/margilon-atlas' },
+  { name: 'cart', path: '/cart' },
+  { name: 'cart-empty', path: '/cart?empty' },
+  { name: 'checkout', path: '/checkout?clean', signedIn: true },
+  { name: 'order-reserved', path: `/orders/${ORDER_ID}`, signedIn: true },
+  { name: 'orders', path: '/orders', signedIn: true },
   {
     name: 'login-otp',
     path: '/login',
@@ -68,7 +92,40 @@ async function mockApi(page: Page) {
     const method = route.request().method()
     const path = url.pathname
     if (method === 'POST' && path === '/api/auth/otp/send/') return route.fulfill({ status: 204 })
+    if (method === 'POST' && path === '/api/auth/token/refresh/') {
+      return json(route, 200, { access: 'fixture-access', refresh: 'fixture-refresh' })
+    }
+    if (path === '/api/auth/me/') return json(route, 200, customer)
+    if (path === '/api/orders/') {
+      return json(route, 200, { items: orderList, total: orderList.length, page: 1, page_size: 10 })
+    }
+    if (path === `/api/orders/${ORDER_ID}/`) return json(route, 200, reservedOrder())
+    if (path === `/api/orders/${ORDER_ID}/status/`) {
+      const { status, reserved_until } = reservedOrder()
+      return json(route, 200, { status, reserved_until })
+    }
     if (path === '/api/catalog/categories/') return json(route, 200, categories)
+    if (method === 'GET' && path === '/api/cart/') {
+      // "?empty" on the page URL shows the empty cart.
+      const search = new URL(page.url()).search
+      if (search === '?clean') return json(route, 200, cleanCart)
+      const empty = search === '?empty'
+      return json(
+        route,
+        200,
+        empty
+          ? {
+              ...cart,
+              groups: [],
+              total_tiyin: 0,
+              items_count: 0,
+              has_unavailable: false,
+              has_price_changes: false,
+              removed: [],
+            }
+          : cart,
+      )
+    }
     if (path === '/api/catalog/products/') {
       const page = Number(url.searchParams.get('page') ?? 1)
       const pageSize = Number(url.searchParams.get('page_size') ?? 24)
@@ -187,6 +244,11 @@ async function main() {
           page.on('console', (msg) => msg.type() === 'error' && errors.push(msg.text()))
           page.on('pageerror', (error) => errors.push(error.message))
           await mockApi(page)
+          // Storage is shared by the context: every shot sets the session it needs.
+          await page.addInitScript((signedIn) => {
+            if (signedIn) localStorage.setItem('bozorcha.refresh', 'fixture-refresh')
+            else localStorage.removeItem('bozorcha.refresh')
+          }, Boolean(shot.signedIn))
           await page.goto(`${baseUrl}${shot.path}`, { waitUntil: 'networkidle' })
           await shot.prepare?.(page)
           await page.evaluate(() => document.fonts.ready)

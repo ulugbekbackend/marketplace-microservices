@@ -19,6 +19,8 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "rest_framework",
     "drf_spectacular",
+    "messaging",
+    "orders",
 ]
 
 MIDDLEWARE = [
@@ -51,8 +53,12 @@ DATABASES: dict[str, dict[str, object]] = {
 
 REST_FRAMEWORK: dict[str, object] = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
-    "DEFAULT_AUTHENTICATION_CLASSES": [],
-    "DEFAULT_PERMISSION_CLASSES": [],
+    "DEFAULT_AUTHENTICATION_CLASSES": ["py_common.web.drf.GatewayAuthentication"],
+    # Every order route needs a signed-in user; the gateway already demands a token.
+    "DEFAULT_PERMISSION_CLASSES": ["py_common.web.drf.IsAuthenticatedUser"],
+    "DEFAULT_PAGINATION_CLASS": "py_common.web.drf.PagePagination",
+    "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
+    "EXCEPTION_HANDLER": "py_common.web.drf.exception_handler",
     "UNAUTHENTICATED_USER": None,
 }
 
@@ -61,7 +67,26 @@ SPECTACULAR_SETTINGS: dict[str, object] = {
     "VERSION": "0.1.0",
     "SCHEMA_PATH_PREFIX": "/api/orders",
     "SERVE_INCLUDE_SCHEMA": False,
+    "COMPONENT_SPLIT_REQUEST": True,
+    "ENUM_NAME_OVERRIDES": {
+        "OrderStatusEnum": "orders.models.ORDER_STATUS_CHOICES",
+        "SubOrderStatusEnum": "orders.models.SUB_ORDER_STATUS_CHOICES",
+    },
 }
+
+# Redis: checkout idempotency keys.
+REDIS_URL = config("REDIS_URL", default="redis://redis:6379/0")
+IDEMPOTENCY_TTL_SECONDS = config("IDEMPOTENCY_TTL_SECONDS", default=24 * 3600, cast=int)
+# Upper bound of one checkout; a crashed request frees its key after this.
+IDEMPOTENCY_LOCK_SECONDS = config("IDEMPOTENCY_LOCK_SECONDS", default=60, cast=int)
+
+# Internal services, reached over the private network only.
+CART_INTERNAL_URL = config("CART_INTERNAL_URL", default="http://cart:8000")
+CATALOG_INTERNAL_URL = config("CATALOG_INTERNAL_URL", default="http://catalog:8000")
+INTERNAL_HTTP_TIMEOUT_SECONDS = config("INTERNAL_HTTP_TIMEOUT_SECONDS", default=3.0, cast=float)
+
+# The mock payment endpoint exists only when this is on AND DEBUG is on.
+PAYMENT_MOCK_ENABLED = config("PAYMENT_MOCK_ENABLED", default=False, cast=bool)
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 USE_TZ = True

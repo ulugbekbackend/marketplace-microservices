@@ -118,3 +118,24 @@ def test_cors_allows_only_the_frontends(client: httpx.Client) -> None:
         headers={"Origin": "http://evil.example", "Access-Control-Request-Method": "POST"},
     )
     assert other.headers.get("access-control-allow-origin") is None
+
+
+@pytest.mark.parametrize("host", ["shop.localhost", "seller.localhost"])
+@pytest.mark.parametrize("prefix", SERVICE_PREFIXES)
+def test_api_is_served_on_the_frontend_origins(
+    client: httpx.Client, host: str, prefix: str
+) -> None:
+    """Same-origin API keeps the guest cart cookie first-party in the browser."""
+    response = client.get(f"{prefix}/health/live", headers={"Host": host})
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
+@pytest.mark.parametrize("host", ["api.localhost", "shop.localhost"])
+def test_internal_routes_are_not_exposed(client: httpx.Client, host: str) -> None:
+    response = client.get(
+        "/internal/cart/00000000-0000-0000-0000-000000000001", headers={"Host": host}
+    )
+
+    assert "user_id" not in response.text
