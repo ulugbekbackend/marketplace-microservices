@@ -12,6 +12,7 @@ urlpatterns = [
     *health_urlpatterns(registry),
     *health_urlpatterns(registry, prefix="api/catalog/"),
     path("api/catalog/", include("products.urls")),
+    path("internal/catalog/", include("products.internal")),
     path("api/catalog/schema/", SpectacularAPIView.as_view(), name="schema"),
     path(
         "api/catalog/docs/",
