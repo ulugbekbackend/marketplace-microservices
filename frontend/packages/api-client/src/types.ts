@@ -6,6 +6,7 @@
  * use site instead of a silent runtime mismatch.
  */
 import type { components as AuthComponents } from './generated/auth'
+import type { components as CartComponents } from './generated/cart'
 import type {
   components as CatalogComponents,
   operations as CatalogOperations,
@@ -67,3 +68,27 @@ export type ProductListParams = NonNullable<
 >
 
 export type Shop = CatalogSchemas['Shop']
+
+/* -------------------------------------------------------------------- cart */
+
+type CartSchemas = CartComponents['schemas']
+
+export type Cart = CartSchemas['CartOut']
+export type CartGroup = CartSchemas['SellerGroupOut']
+export type CartItem = CartSchemas['CartItemOut']
+export type CartItemAttribute = CartSchemas['VariantAttribute']
+export type CartAddItemRequest = CartSchemas['AddItemIn']
+export type CartUpdateItemRequest = CartSchemas['UpdateItemIn']
+export type FavoriteRequest = CartSchemas['FavoriteIn']
+export type Favorites = CartSchemas['FavoritesOut']
+
+/** Error codes returned by the cart service (codes are not part of the OpenAPI schema). */
+export type CartErrorCode =
+  | 'OUT_OF_STOCK'
+  | 'VARIANT_INACTIVE'
+  | 'VARIANT_NOT_FOUND'
+  | 'NOT_IN_CART'
+  | 'CART_FULL'
+  | 'FAVORITES_FULL'
+  | 'CATALOG_UNAVAILABLE'
+  | 'VALIDATION_ERROR'

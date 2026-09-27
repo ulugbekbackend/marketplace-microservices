@@ -12,7 +12,7 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { mkdir } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { chromium, type Page, type Route } from '@playwright/test'
-import { categories, IMAGE_HOST, productDetail, products, productSvg, shop } from './fixtures'
+import { cart, categories, IMAGE_HOST, productDetail, products, productSvg, shop } from './fixtures'
 
 const PREVIEW_PORT = 4179
 const WIDTHS = [360, 1280] as const
@@ -25,6 +25,8 @@ const SHOTS: Shot[] = [
   { name: 'catalog', path: '/catalog/kiyim' },
   { name: 'product', path: '/p/atlas-koylak' },
   { name: 'shop', path: '/shop/margilon-atlas' },
+  { name: 'cart', path: '/cart' },
+  { name: 'cart-empty', path: '/cart?empty' },
   {
     name: 'login-otp',
     path: '/login',
@@ -69,6 +71,25 @@ async function mockApi(page: Page) {
     const path = url.pathname
     if (method === 'POST' && path === '/api/auth/otp/send/') return route.fulfill({ status: 204 })
     if (path === '/api/catalog/categories/') return json(route, 200, categories)
+    if (method === 'GET' && path === '/api/cart/') {
+      // "?empty" on the page URL shows the empty cart.
+      const empty = new URL(page.url()).search === '?empty'
+      return json(
+        route,
+        200,
+        empty
+          ? {
+              ...cart,
+              groups: [],
+              total_tiyin: 0,
+              items_count: 0,
+              has_unavailable: false,
+              has_price_changes: false,
+              removed: [],
+            }
+          : cart,
+      )
+    }
     if (path === '/api/catalog/products/') {
       const page = Number(url.searchParams.get('page') ?? 1)
       const pageSize = Number(url.searchParams.get('page_size') ?? 24)

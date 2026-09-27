@@ -5,6 +5,7 @@ export type FakeRequest = {
   url: URL
   headers: Record<string, string>
   body: unknown
+  credentials: RequestCredentials | undefined
 }
 
 export type Handler = (req: FakeRequest) => Response | Promise<Response>
@@ -36,7 +37,7 @@ export function fakeFetch(routes: Record<string, Handler>) {
     const method = (init.method ?? 'GET').toUpperCase()
     const headers = { ...(init.headers as Record<string, string>) }
     const body = typeof init.body === 'string' ? JSON.parse(init.body) : undefined
-    const req = { method, url, headers, body }
+    const req = { method, url, headers, body, credentials: init.credentials }
     calls.push(req)
     const handler = routes[`${method} ${url.pathname}`]
     if (!handler) return json(404, errorBody('NOT_FOUND'))

@@ -3,6 +3,7 @@ import { cn, Wordmark } from '@bozorcha/ui'
 import { useTranslation } from 'react-i18next'
 import { Link, NavLink } from 'react-router'
 import { AccountMenu } from './AccountMenu'
+import { CartLink } from './CartLink'
 import { SearchBox } from './SearchBox'
 import { ThemeToggle } from './ThemeToggle'
 
@@ -23,6 +24,7 @@ export function Header() {
         <SearchBox className="hidden max-w-2xl md:flex" />
         <div className="ml-auto flex shrink-0 items-center gap-1">
           <ThemeToggle />
+          <CartLink />
           <AccountMenu />
         </div>
       </div>

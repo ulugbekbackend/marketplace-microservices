@@ -67,7 +67,10 @@ describe('request basics', () => {
   })
 
   it('adds the Idempotency-Key header when requested', async () => {
-    const { client, server } = setup({ 'POST /api/orders/': () => json(201, { id: 'o1' }) })
+    const { client, server } = setup(
+      { 'POST /api/orders/': () => json(201, { id: 'o1' }) },
+      { refresh: null },
+    )
     const key = newIdempotencyKey()
     await client.post('/api/orders/', {}, { idempotencyKey: key })
     expect(server.calls[0]!.headers[IDEMPOTENCY_HEADER]).toBe(key)
@@ -105,6 +108,29 @@ describe('token refresh on 401', () => {
     })
     await expect(client.get(ME)).resolves.toMatchObject({ id: 'u1' })
     expect(server.callsTo('POST', REFRESH_PATH)).toHaveLength(1)
+    // refreshed before the first request, so no request went out anonymously
+    expect(server.callsTo('GET', ME).map((c) => c.headers.Authorization)).toEqual(['Bearer fresh'])
+  })
+
+  it('after reload, endpoints that also serve guests get the token before the first call', async () => {
+    const { client, server } = setup({
+      // jwt-optional: answers 200 either way, so a 401-driven refresh would never happen
+      'GET /api/cart/': (req) => json(200, { owner: req.headers.Authorization ?? 'guest' }),
+      [`POST ${REFRESH_PATH}`]: () => json(200, { access: 'fresh', refresh: 'r2' }),
+    })
+    await Promise.all([client.get('/api/cart/'), client.get('/api/cart/')]).then((results) =>
+      expect(results).toEqual([{ owner: 'Bearer fresh' }, { owner: 'Bearer fresh' }]),
+    )
+    expect(server.callsTo('POST', REFRESH_PATH)).toHaveLength(1)
+  })
+
+  it('a rejected refresh on reload falls back to an anonymous request', async () => {
+    const { client, onSessionExpired } = setup({
+      'GET /api/cart/': (req) => json(200, { owner: req.headers.Authorization ?? 'guest' }),
+      [`POST ${REFRESH_PATH}`]: () => json(401, errorBody('TOKEN_INVALID')),
+    })
+    await expect(client.get('/api/cart/')).resolves.toEqual({ owner: 'guest' })
+    expect(onSessionExpired).toHaveBeenCalledOnce()
   })
 
   it('concurrent 401s share a single refresh', async () => {

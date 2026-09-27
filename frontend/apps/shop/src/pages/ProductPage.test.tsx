@@ -1,8 +1,8 @@
 import type { ProductDetail } from '@bozorcha/api-client'
-import { screen, within } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
-import { apiError, json, renderWithApi } from '../test/renderApp'
+import { apiError, json, renderWithApi, type Route } from '../test/renderApp'
 import { ProductPage } from './ProductPage'
 
 const attrs = (color: string, size: string) => [
@@ -59,7 +59,46 @@ const product: ProductDetail = {
 const routes = [{ path: '/p/:slug', element: <ProductPage /> }]
 const plain = (text: string | null) => (text ?? '').replaceAll(String.fromCharCode(0xa0), ' ')
 
-function setup(overrides: Record<string, () => Response> = {}) {
+const emptyCart = {
+  groups: [],
+  total_tiyin: 0,
+  items_count: 0,
+  has_unavailable: false,
+  has_price_changes: false,
+  removed: [],
+}
+
+const cartWith = (variantId: string, qty: number) => ({
+  ...emptyCart,
+  items_count: qty,
+  groups: [
+    {
+      seller_id: 's1',
+      shop_name: "Marg'ilon atlas",
+      subtotal_tiyin: 150_000_00 * qty,
+      items: [
+        {
+          variant_id: variantId,
+          product_id: 'p1',
+          product_slug: 'paxta-koylak',
+          title: "Paxta ko'ylak",
+          sku: 'K-QS',
+          image_url: null,
+          attributes: [],
+          qty,
+          price_tiyin: 150_000_00,
+          line_total_tiyin: 150_000_00 * qty,
+          available_qty: 3,
+          available: true,
+          price_changed: false,
+          previous_price_tiyin: null,
+        },
+      ],
+    },
+  ],
+})
+
+function setup(overrides: Record<string, Route> = {}) {
   return renderWithApi(
     routes,
     {
@@ -72,6 +111,7 @@ function setup(overrides: Record<string, () => Response> = {}) {
           product_count: 42,
           created_at: '2024-03-01T00:00:00Z',
         }),
+      'GET /api/cart/': () => json(200, emptyCart),
       ...overrides,
     },
     '/p/paxta-koylak',
@@ -101,15 +141,61 @@ describe('ProductPage', () => {
     expect(screen.getByText('Artikul: K-OM')).toBeInTheDocument()
   })
 
-  it('keeps "Savatchaga" disabled and explains why', async () => {
+  it('adds the selected variant with the chosen quantity', async () => {
     const u = userEvent.setup()
-    setup()
+    const added: unknown[] = []
+    setup({
+      'POST /api/cart/items/': (body) => {
+        added.push(body)
+        return json(200, cartWith('v1', 2))
+      },
+    })
+    await u.click(await screen.findByRole('button', { name: "Ko'paytirish" }))
+    await u.click(screen.getByRole('button', { name: 'Savatchaga' }))
+    expect(added).toEqual([{ variant_id: 'v1', qty: 2 }])
+    expect(await screen.findByText("Savatchaga qo'shildi")).toBeInTheDocument()
+    expect(await screen.findByText('Savatchada: 2 ta')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: "Savatchaga o'tish" })).toHaveAttribute('href', '/cart')
+  })
+
+  it('explains an out-of-stock answer with the units left', async () => {
+    const u = userEvent.setup()
+    setup({ 'POST /api/cart/items/': () => apiError(409, 'OUT_OF_STOCK', { available: 1 }) })
+    await u.click(await screen.findByRole('button', { name: 'Savatchaga' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Omborda yetarli emas: faqat 1 ta bor.',
+    )
+  })
+
+  it('disables "Savatchaga" for a sold-out variant', async () => {
+    const soldOut = { ...product, variants: [{ ...product.variants[0]!, available: 0 }] }
+    setup({ 'GET /api/catalog/products/paxta-koylak/': () => json(200, soldOut) })
     const button = await screen.findByRole('button', { name: 'Savatchaga' })
-    expect(button).toHaveAttribute('aria-disabled', 'true')
-    await u.click(button)
-    expect(
-      await screen.findByText('Savatcha tez orada ishga tushadi', { selector: 'p.font-semibold' }),
-    ).toBeInTheDocument()
+    expect(button).toBeDisabled()
+    expect(button).toHaveAccessibleDescription("Bu variant hozir sotuvda yo'q")
+  })
+
+  it('sends guests to login from the heart', async () => {
+    setup()
+    const link = await screen.findByRole('link', { name: "Sevimlilarga qo'shish uchun kiring" })
+    expect(link).toHaveAttribute('href', '/login?next=%2Fp%2Fpaxta-koylak')
+  })
+
+  it('toggles the favorite for signed-in users', async () => {
+    const u = userEvent.setup()
+    const { client } = setup({
+      'GET /api/cart/favorites/': () => json(200, { items: [] }),
+      'POST /api/cart/favorites/': () => json(200, { items: ['p1'] }),
+      'DELETE /api/cart/favorites/p1/': () => new Response(null, { status: 204 }),
+    })
+    act(() => client.tokens.set({ access: 'a1', refresh: 'r1' }))
+    const heart = await screen.findByRole('button', { name: "Sevimlilarga qo'shish" })
+    await waitFor(() => expect(heart).toBeEnabled())
+    expect(heart).toHaveAttribute('aria-pressed', 'false')
+    await u.click(heart)
+    await waitFor(() => expect(heart).toHaveAttribute('aria-pressed', 'true'))
+    await u.click(heart)
+    await waitFor(() => expect(heart).toHaveAttribute('aria-pressed', 'false'))
   })
 
   it('links the shop card to the shop page', async () => {

@@ -174,3 +174,69 @@ export const shop = {
   is_verified: true,
   created_at: '2024-04-12T08:00:00Z',
 }
+
+const cartLine = (
+  variantId: string,
+  product: (typeof products)[number],
+  som: number,
+  qty: number,
+  availableQty: number,
+  attributes: [string, string][],
+  previousSom: number | null = null,
+) => {
+  const available = availableQty >= qty
+  return {
+    variant_id: variantId,
+    product_id: product.id,
+    product_slug: product.slug,
+    title: product.title,
+    sku: `SKU-${variantId}`,
+    image_url: product.image_url,
+    attributes: attributes.map(([name, value]) => ({ code: name.toLowerCase(), name, value })),
+    qty,
+    price_tiyin: so(som),
+    line_total_tiyin: so(som) * qty,
+    available_qty: availableQty,
+    available,
+    price_changed: previousSom !== null,
+    previous_price_tiyin: previousSom === null ? null : so(previousSom),
+  }
+}
+
+const byId = (id: string) => products.find((p) => p.id === id)!
+
+const cartGroups = [
+  {
+    seller_id: sellers.atlas.id,
+    shop_name: sellers.atlas.shop_name,
+    items: [
+      cartLine('v1', byId('p1'), 420_000, 1, 4, [
+        ['Rang', "Ko'k"],
+        ["O'lcham", 'S'],
+      ]),
+      cartLine('v20', byId('p6'), 110_000, 2, 12, [['Rang', 'Qizil']], 95_000),
+    ],
+  },
+  {
+    seller_id: sellers.rishton.id,
+    shop_name: sellers.rishton.shop_name,
+    items: [
+      cartLine('v30', byId('p7'), 340_000, 1, 5, []),
+      cartLine('v31', byId('p12'), 160_000, 2, 0, [['Rang', 'Firuza']]),
+    ],
+  },
+].map((group) => ({
+  ...group,
+  subtotal_tiyin: group.items
+    .filter((i) => i.available)
+    .reduce((sum, i) => sum + i.line_total_tiyin, 0),
+}))
+
+export const cart = {
+  groups: cartGroups,
+  total_tiyin: cartGroups.reduce((sum, g) => sum + g.subtotal_tiyin, 0),
+  items_count: cartGroups.flatMap((g) => g.items).reduce((sum, i) => sum + i.qty, 0),
+  has_unavailable: true,
+  has_price_changes: true,
+  removed: ['v-gone'],
+}

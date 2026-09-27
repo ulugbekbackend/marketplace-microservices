@@ -22,6 +22,11 @@ export type RequestOptions = {
   /** Sent as the `Idempotency-Key` header (see `newIdempotencyKey`). */
   idempotencyKey?: string
   signal?: AbortSignal
+  /**
+   * Fetch credentials mode. Services that identify guests by a cookie on the API host (the cart)
+   * need `'include'`, because the shop and the API are different origins.
+   */
+  credentials?: RequestCredentials
 }
 
 export type ApiClientOptions = {
@@ -77,6 +82,7 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
         headers,
         body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
         signal: opts.signal,
+        ...(opts.credentials ? { credentials: opts.credentials } : {}),
       })
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') {
@@ -135,6 +141,13 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
     // A refresh already in flight (another request got a 401): wait instead of sending a
     // request that is bound to fail with the old token.
     if (inflightRefresh) await inflightRefresh.catch(() => false)
+
+    // A stored session without an access token (e.g. right after a reload): get one first.
+    // Endpoints that also answer anonymously (the cart) would otherwise return the guest's data
+    // with a 200 instead of a 401, and the customer would silently see the wrong cart.
+    if (!tokens.getAccess() && tokens.getRefresh() && !NO_REFRESH_PATHS.includes(path)) {
+      await refresh().catch(() => false)
+    }
 
     const usedToken = tokens.getAccess()
     let response = await rawFetch(method, path, opts, usedToken)

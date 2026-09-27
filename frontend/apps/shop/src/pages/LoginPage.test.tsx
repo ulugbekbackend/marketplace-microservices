@@ -73,6 +73,39 @@ describe('LoginPage', () => {
   })
 
   it.each([
+    [
+      'succeeds',
+      () =>
+        json(200, {
+          groups: [],
+          total_tiyin: 0,
+          items_count: 0,
+          has_unavailable: false,
+          has_price_changes: false,
+          removed: [],
+        }),
+    ],
+    ['fails', () => apiError(503, 'CATALOG_UNAVAILABLE')],
+  ])(
+    'merges the guest cart once after login, and still logs in when the merge %s',
+    async (_, merge) => {
+      const u = userEvent.setup()
+      const { fetchMock, router } = setup({ 'POST /api/cart/merge/': merge })
+      await submitPhone(u)
+      await u.click((await screen.findAllByRole('textbox', { name: /-raqam/ }))[0]!)
+      await u.keyboard('123456')
+      await waitFor(() => expect(router.state.location.pathname).toBe('/p/choynak'))
+      const mergeCalls = () =>
+        fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/api/cart/merge/'))
+      await waitFor(() => expect(mergeCalls()).toHaveLength(1))
+      const [, init] = mergeCalls()[0]!
+      expect(init!.method).toBe('POST')
+      expect(init!.credentials).toBe('include')
+      expect((init!.headers as Record<string, string>).Authorization).toBe('Bearer a1')
+    },
+  )
+
+  it.each([
     ['OTP_EXPIRED', /muddati tugadi/],
     ['OTP_BLOCKED', /vaqtincha bloklandi/],
   ])('shows %s from verify', async (code, message) => {
