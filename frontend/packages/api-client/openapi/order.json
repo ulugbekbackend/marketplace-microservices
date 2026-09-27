@@ -1,0 +1,819 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Order service",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/orders/": {
+      "get": {
+        "operationId": "orders_list",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "A page number within the paginated result set.",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "page_size",
+            "required": false,
+            "in": "query",
+            "description": "Number of results to return per page.",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "tags": ["orders"],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedOrderSummaryList"
+                }
+              }
+            },
+            "description": ""
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "NOT_AUTHENTICATED"
+          }
+        }
+      }
+    },
+    "/api/orders/{order_id}/": {
+      "get": {
+        "operationId": "orders_retrieve",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "order_id",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true
+          }
+        ],
+        "tags": ["orders"],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderDetail"
+                }
+              }
+            },
+            "description": ""
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "NOT_AUTHENTICATED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "NOT_FOUND: no such order of the current user"
+          }
+        }
+      }
+    },
+    "/api/orders/{order_id}/cancel/": {
+      "post": {
+        "operationId": "orders_cancel",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "order_id",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true
+          }
+        ],
+        "tags": ["orders"],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderDetail"
+                }
+              }
+            },
+            "description": ""
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "NOT_AUTHENTICATED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "NOT_FOUND: no such order of the current user"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "INVALID_TRANSITION: only PENDING or RESERVED"
+          }
+        }
+      }
+    },
+    "/api/orders/{order_id}/pay/mock/": {
+      "post": {
+        "operationId": "orders_pay_mock",
+        "description": "Exists only when PAYMENT_MOCK_ENABLED and DEBUG are on; 404 otherwise.",
+        "summary": "Pay an order without a provider (development only)",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "order_id",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true
+          }
+        ],
+        "tags": ["orders"],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderDetail"
+                }
+              }
+            },
+            "description": ""
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "NOT_AUTHENTICATED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "NOT_FOUND: no such order of the current user"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "INVALID_TRANSITION, ORDER_EXPIRED, NOT_RESERVED"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "SERVICE_UNAVAILABLE: catalog did not answer"
+          }
+        }
+      }
+    },
+    "/api/orders/{order_id}/status/": {
+      "get": {
+        "operationId": "orders_status",
+        "summary": "Order status for polling",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "order_id",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true
+          }
+        ],
+        "tags": ["orders"],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderStatus"
+                }
+              }
+            },
+            "description": ""
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "NOT_AUTHENTICATED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "NOT_FOUND: no such order of the current user"
+          }
+        }
+      }
+    },
+    "/api/orders/checkout/": {
+      "post": {
+        "operationId": "orders_checkout",
+        "description": "Snapshots current catalog prices, creates the order and reserves its stock. The answer carries the order id and its status (RESERVED, or CANCELLED when the stock could not be held); poll the status endpoint afterwards. Retries with the same Idempotency-Key and body replay the first answer.",
+        "summary": "Create an order from the cart",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Unique per checkout attempt (e.g. a UUID), at most 255 characters.",
+            "required": true
+          }
+        ],
+        "tags": ["orders"],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CheckoutRequest"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/CheckoutRequest"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/CheckoutRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckoutResult"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "VALIDATION_ERROR, IDEMPOTENCY_KEY_REQUIRED, IDEMPOTENCY_KEY_INVALID"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "NOT_AUTHENTICATED"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "CART_EMPTY; ITEMS_UNAVAILABLE with details.items[{variant_id, reason (not_found|inactive|out_of_stock), available}]; IDEMPOTENCY_KEY_REUSED; IDEMPOTENCY_IN_PROGRESS"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "SERVICE_UNAVAILABLE: cart, catalog or redis did not answer"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Address": {
+        "type": "object",
+        "properties": {
+          "full_name": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "phone": {
+            "type": "string",
+            "maxLength": 20,
+            "pattern": "^\\+?[0-9][0-9 ()-]{6,19}$"
+          },
+          "region": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "city": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "street": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "notes": {
+            "type": "string",
+            "default": "",
+            "maxLength": 500
+          }
+        },
+        "required": ["city", "full_name", "phone", "region", "street"]
+      },
+      "AddressRequest": {
+        "type": "object",
+        "properties": {
+          "full_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "phone": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20,
+            "pattern": "^\\+?[0-9][0-9 ()-]{6,19}$"
+          },
+          "region": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "city": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "street": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "notes": {
+            "type": "string",
+            "default": "",
+            "maxLength": 500
+          }
+        },
+        "required": ["city", "full_name", "phone", "region", "street"]
+      },
+      "CheckoutRequest": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "$ref": "#/components/schemas/AddressRequest"
+          }
+        },
+        "required": ["address"]
+      },
+      "CheckoutResult": {
+        "type": "object",
+        "properties": {
+          "order_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "$ref": "#/components/schemas/OrderStatusEnum"
+          }
+        },
+        "required": ["order_id", "status"]
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ErrorBody"
+          }
+        },
+        "required": ["error"]
+      },
+      "ErrorBody": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object",
+            "additionalProperties": {}
+          }
+        },
+        "required": ["code", "details", "message"]
+      },
+      "NullEnum": {
+        "enum": [null]
+      },
+      "OrderDetail": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "readOnly": true
+          },
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/OrderStatusEnum"
+              }
+            ],
+            "readOnly": true
+          },
+          "total_tiyin": {
+            "type": "integer",
+            "readOnly": true
+          },
+          "delivery_address": {
+            "$ref": "#/components/schemas/Address"
+          },
+          "reserved_until": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true,
+            "nullable": true
+          },
+          "cancel_reason": {
+            "type": "string",
+            "readOnly": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          },
+          "sellers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SellerGroup"
+            },
+            "readOnly": true
+          },
+          "history": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrderHistory"
+            }
+          }
+        },
+        "required": [
+          "cancel_reason",
+          "created_at",
+          "delivery_address",
+          "history",
+          "id",
+          "reserved_until",
+          "sellers",
+          "status",
+          "total_tiyin",
+          "updated_at"
+        ]
+      },
+      "OrderHistory": {
+        "type": "object",
+        "properties": {
+          "from_status": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/OrderStatusEnum"
+              },
+              {
+                "$ref": "#/components/schemas/NullEnum"
+              }
+            ]
+          },
+          "to_status": {
+            "$ref": "#/components/schemas/OrderStatusEnum"
+          },
+          "reason": {
+            "type": "string",
+            "readOnly": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          }
+        },
+        "required": ["created_at", "from_status", "reason", "to_status"]
+      },
+      "OrderItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "readOnly": true
+          },
+          "variant_id": {
+            "type": "string",
+            "format": "uuid",
+            "readOnly": true
+          },
+          "title": {
+            "type": "string"
+          },
+          "sku": {
+            "type": "string"
+          },
+          "image_url": {
+            "type": "string",
+            "nullable": true,
+            "readOnly": true
+          },
+          "price_tiyin": {
+            "type": "integer"
+          },
+          "qty": {
+            "type": "integer",
+            "readOnly": true
+          },
+          "line_total_tiyin": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "image_url",
+          "line_total_tiyin",
+          "price_tiyin",
+          "qty",
+          "sku",
+          "title",
+          "variant_id"
+        ]
+      },
+      "OrderStatus": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/OrderStatusEnum"
+              }
+            ],
+            "readOnly": true
+          },
+          "reserved_until": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true,
+            "nullable": true
+          }
+        },
+        "required": ["reserved_until", "status"]
+      },
+      "OrderStatusEnum": {
+        "enum": [
+          "PENDING",
+          "RESERVED",
+          "PAID",
+          "FULFILLING",
+          "COMPLETED",
+          "EXPIRED",
+          "CANCELLED",
+          "REFUNDED"
+        ],
+        "type": "string",
+        "description": "* `PENDING` - Pending\n* `RESERVED` - Reserved\n* `PAID` - Paid\n* `FULFILLING` - Fulfilling\n* `COMPLETED` - Completed\n* `EXPIRED` - Expired\n* `CANCELLED` - Cancelled\n* `REFUNDED` - Refunded"
+      },
+      "OrderSummary": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "readOnly": true
+          },
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/OrderStatusEnum"
+              }
+            ],
+            "readOnly": true
+          },
+          "total_tiyin": {
+            "type": "integer",
+            "readOnly": true
+          },
+          "items_count": {
+            "type": "integer",
+            "readOnly": true
+          },
+          "reserved_until": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true,
+            "nullable": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          }
+        },
+        "required": ["created_at", "id", "items_count", "reserved_until", "status", "total_tiyin"]
+      },
+      "PaginatedOrderSummaryList": {
+        "type": "object",
+        "required": ["items", "total", "page", "page_size"],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrderSummary"
+            }
+          },
+          "total": {
+            "type": "integer"
+          },
+          "page": {
+            "type": "integer"
+          },
+          "page_size": {
+            "type": "integer"
+          }
+        }
+      },
+      "SellerGroup": {
+        "type": "object",
+        "description": "The items of one seller. ``sub_order_id``/``status`` stay null until payment.",
+        "properties": {
+          "seller_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "shop_name": {
+            "type": "string"
+          },
+          "sub_order_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "status": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SubOrderStatusEnum"
+              },
+              {
+                "$ref": "#/components/schemas/NullEnum"
+              }
+            ]
+          },
+          "subtotal_tiyin": {
+            "type": "integer"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrderItem"
+            }
+          }
+        },
+        "required": ["items", "seller_id", "shop_name", "status", "sub_order_id", "subtotal_tiyin"]
+      },
+      "SubOrderStatusEnum": {
+        "enum": ["NEW", "ACCEPTED", "SHIPPED", "DELIVERED", "CANCELLED_BY_SELLER"],
+        "type": "string",
+        "description": "* `NEW` - New\n* `ACCEPTED` - Accepted\n* `SHIPPED` - Shipped\n* `DELIVERED` - Delivered\n* `CANCELLED_BY_SELLER` - Cancelled_By_Seller"
+      }
+    },
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  }
+}
