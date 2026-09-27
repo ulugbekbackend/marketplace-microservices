@@ -28,6 +28,7 @@ export function renderWithApi(
   routes: RouteObject[],
   api: Record<string, Route>,
   initialEntry: string,
+  options: { signedIn?: boolean } = {},
 ) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
     const url = new URL(String(input))
@@ -41,6 +42,7 @@ export function renderWithApi(
     tokens: new TokenStore(memoryStorage()),
     fetch: fetchMock as unknown as typeof fetch,
   })
+  if (options.signedIn) client.tokens.set({ access: 'a1', refresh: 'r1' })
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   })
@@ -54,5 +56,12 @@ export function renderWithApi(
       </ApiProvider>
     </QueryClientProvider>,
   )
-  return { ...view, fetchMock, router, client }
+  /** Calls made to one endpoint, as [url, init] pairs. */
+  const callsTo = (method: string, path: string) =>
+    fetchMock.mock.calls.filter(
+      ([input, init]) =>
+        (init?.method ?? 'GET').toUpperCase() === method &&
+        new URL(String(input)).pathname === path,
+    )
+  return { ...view, fetchMock, router, client, queryClient, callsTo }
 }

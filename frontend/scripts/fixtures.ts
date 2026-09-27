@@ -240,3 +240,88 @@ export const cart = {
   has_price_changes: true,
   removed: ['v-gone'],
 }
+
+/** The same cart with only sellable lines: what checkout sees after the customer fixed it. */
+export const cleanCart = (() => {
+  const groups = cartGroups
+    .map((group) => ({ ...group, items: group.items.filter((i) => i.available) }))
+    .filter((group) => group.items.length > 0)
+  return {
+    groups,
+    total_tiyin: groups.reduce((sum, g) => sum + g.subtotal_tiyin, 0),
+    items_count: groups.flatMap((g) => g.items).reduce((sum, i) => sum + i.qty, 0),
+    has_unavailable: false,
+    has_price_changes: false,
+    removed: [],
+  }
+})()
+
+export const customer = {
+  id: 'u1',
+  phone: '+998901112233',
+  full_name: 'Aziza Karimova',
+  role: 'customer',
+}
+
+export const ORDER_ID = '7f3c9a21-5b8e-4c1d-9f20-6a4e1b7d3c55'
+
+/** A reserved order whose payment window ends `minutesLeft` from now. */
+export function reservedOrder(minutesLeft = 11.5) {
+  const now = Date.now()
+  const at = (offsetMs: number) => new Date(now + offsetMs).toISOString()
+  return {
+    id: ORDER_ID,
+    status: 'RESERVED',
+    reserved_until: at(minutesLeft * 60_000),
+    total_tiyin: cleanCart.total_tiyin,
+    cancel_reason: '',
+    created_at: at(-3.5 * 60_000),
+    updated_at: at(-3.4 * 60_000),
+    delivery_address: {
+      full_name: customer.full_name,
+      phone: customer.phone,
+      region: "Farg'ona viloyati",
+      city: "Marg'ilon",
+      street: "Mustaqillik ko'chasi, 14-uy",
+      notes: "Darvoza ko'k rangda, qo'ng'iroq qiling",
+    },
+    history: [
+      { from_status: null, to_status: 'PENDING', reason: '', created_at: at(-3.5 * 60_000) },
+      { from_status: 'PENDING', to_status: 'RESERVED', reason: '', created_at: at(-3.4 * 60_000) },
+    ],
+    sellers: cleanCart.groups.map((group) => ({
+      seller_id: group.seller_id,
+      shop_name: group.shop_name,
+      sub_order_id: null,
+      status: null,
+      subtotal_tiyin: group.subtotal_tiyin,
+      items: group.items.map((item, i) => ({
+        id: `${item.variant_id}-${i}`,
+        variant_id: item.variant_id,
+        title: item.title,
+        sku: item.sku,
+        image_url: item.image_url,
+        qty: item.qty,
+        price_tiyin: item.price_tiyin,
+        line_total_tiyin: item.line_total_tiyin,
+      })),
+    })),
+  }
+}
+
+const orderSummary = (id: string, status: string, som: number, count: number, daysAgo: number) => ({
+  id,
+  status,
+  total_tiyin: so(som),
+  items_count: count,
+  reserved_until: null,
+  created_at: new Date(Date.UTC(2026, 8, 27 - daysAgo, 9 + daysAgo, 15)).toISOString(),
+})
+
+export const orderList = [
+  { ...orderSummary(ORDER_ID, 'RESERVED', 980_000, 4, 0) },
+  orderSummary('2a9e4c10-1111-4000-8000-000000000001', 'PAID', 185_000, 1, 1),
+  orderSummary('b41d0e77-2222-4000-8000-000000000002', 'COMPLETED', 5_290_000, 1, 6),
+  orderSummary('c9f2a5e3-3333-4000-8000-000000000003', 'EXPIRED', 340_000, 2, 9),
+  orderSummary('d03b7f88-4444-4000-8000-000000000004', 'CANCELLED', 129_000, 3, 14),
+]

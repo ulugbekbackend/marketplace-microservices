@@ -1,0 +1,289 @@
+import { queryKeys, type Order, type OrderStatus } from '@bozorcha/api-client'
+import { act, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { apiError, json, renderWithApi, type Route } from '../test/renderApp'
+import { OrderPage } from './OrderPage'
+
+const plain = (text: string | null) => (text ?? '').replaceAll(String.fromCharCode(0xa0), ' ')
+
+const NOW = Date.parse('2026-09-27T10:00:00Z')
+const iso = (ms: number) => new Date(ms).toISOString()
+
+const baseOrder: Order = {
+  id: 'a1b2c3d4-0000-4000-8000-000000000001',
+  status: 'RESERVED',
+  reserved_until: iso(NOW + 15 * 60_000),
+  total_tiyin: 300_000_00,
+  cancel_reason: '',
+  created_at: iso(NOW - 1000),
+  updated_at: iso(NOW),
+  delivery_address: {
+    full_name: 'Aziza Karimova',
+    phone: '+998901112233',
+    region: 'Toshkent shahri',
+    city: 'Toshkent',
+    street: 'Navoiy 12',
+    notes: 'Kechqurun',
+  },
+  history: [
+    { from_status: null, to_status: 'PENDING', reason: '', created_at: iso(NOW - 1000) },
+    { from_status: 'PENDING', to_status: 'RESERVED', reason: '', created_at: iso(NOW) },
+  ],
+  sellers: [
+    {
+      seller_id: 's1',
+      shop_name: 'Rishton sopol',
+      sub_order_id: null,
+      status: null,
+      subtotal_tiyin: 200_000_00,
+      items: [
+        {
+          id: 'i1',
+          variant_id: 'v1',
+          title: 'Choynak',
+          sku: 'CH-1',
+          image_url: null,
+          qty: 2,
+          price_tiyin: 100_000_00,
+          line_total_tiyin: 200_000_00,
+        },
+      ],
+    },
+    {
+      seller_id: 's2',
+      shop_name: "Marg'ilon atlas",
+      sub_order_id: null,
+      status: null,
+      subtotal_tiyin: 100_000_00,
+      items: [
+        {
+          id: 'i2',
+          variant_id: 'v2',
+          title: "Atlas ko'ylak",
+          sku: 'AT-1',
+          image_url: null,
+          qty: 1,
+          price_tiyin: 100_000_00,
+          line_total_tiyin: 100_000_00,
+        },
+      ],
+    },
+  ],
+}
+
+const withStatus = (status: OrderStatus, extra: Partial<Order> = {}): Order => ({
+  ...baseOrder,
+  status,
+  reserved_until: status === 'RESERVED' ? baseOrder.reserved_until : null,
+  ...extra,
+})
+
+const ID = baseOrder.id
+const DETAIL = `/api/orders/${ID}/`
+const STATUS = `/api/orders/${ID}/status/`
+
+const routes = [
+  { path: '/orders/:orderId', element: <OrderPage /> },
+  { path: '/login', element: <p>Kirish sahifasi</p> },
+]
+
+function setup(api: Record<string, Route>, signedIn = true) {
+  return renderWithApi(routes, api, `/orders/${ID}`, { signedIn })
+}
+
+const statusOf = (order: Order) => () =>
+  json(200, { status: order.status, reserved_until: order.reserved_until })
+
+afterEach(() => vi.useRealTimers())
+
+describe('OrderPage', () => {
+  it('shows a reserved order: countdown, items per shop, totals, address and history', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(NOW)
+    const order = withStatus('RESERVED')
+    setup({ [`GET ${DETAIL}`]: () => json(200, order), [`GET ${STATUS}`]: statusOf(order) })
+
+    expect(await screen.findByRole('heading', { name: 'Buyurtma #A1B2C3D4' })).toBeInTheDocument()
+    const timer = screen.getByRole('timer', { name: "To'lov uchun qolgan vaqt" })
+    expect(timer.textContent).toMatch(/^1[45]:\d\d$/)
+    expect(screen.getByRole('button', { name: "To'lash (test)" })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Buyurtmani bekor qilish' })).toBeInTheDocument()
+
+    const rishton = screen.getByRole('region', { name: 'Rishton sopol' })
+    expect(within(rishton).getByText('Choynak')).toBeInTheDocument()
+    expect(plain(within(rishton).getByText(/2 ×/).textContent)).toBe("2 × 100 000 so'm")
+    expect(plain(screen.getByTestId('order-total').textContent)).toBe("300 000 so'm")
+    expect(screen.getByText('Navoiy 12')).toBeInTheDocument()
+    const history = screen.getByRole('list', { name: 'Buyurtma tarixi' })
+    expect(within(history).getAllByRole('listitem')).toHaveLength(2)
+    expect(within(history).getByText("To'lov kutilmoqda")).toBeInTheDocument()
+  })
+
+  it('turns red near the deadline and refetches when the countdown reaches zero', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(NOW)
+    const reserved = withStatus('RESERVED', { reserved_until: iso(NOW + 3000) })
+    const expired = withStatus('EXPIRED', {
+      cancel_reason: 'RESERVATION_EXPIRED',
+      history: [
+        ...baseOrder.history,
+        {
+          from_status: 'RESERVED',
+          to_status: 'EXPIRED',
+          reason: 'RESERVATION_EXPIRED',
+          created_at: iso(NOW + 3000),
+        },
+      ],
+    })
+    let serverExpired = false
+    const { callsTo } = setup({
+      [`GET ${DETAIL}`]: () => json(200, serverExpired ? expired : reserved),
+      // The server expires lazily: reads after the deadline report EXPIRED.
+      [`GET ${STATUS}`]: () =>
+        json(
+          200,
+          serverExpired
+            ? { status: 'EXPIRED', reserved_until: null }
+            : {
+                status: 'RESERVED',
+                reserved_until: reserved.reserved_until,
+              },
+        ),
+    })
+    const timer = await screen.findByRole('timer')
+    expect(timer).toHaveTextContent('00:03')
+    expect(timer).toHaveClass('text-danger-ink')
+    const statusCallsBefore = callsTo('GET', STATUS).length
+
+    serverExpired = true
+    await act(() => vi.advanceTimersByTimeAsync(3500))
+    await waitFor(() => expect(callsTo('GET', STATUS).length).toBeGreaterThan(statusCallsBefore))
+    expect(await screen.findByText("To'lov vaqti tugadi")).toBeInTheDocument()
+    expect(screen.queryByRole('timer')).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: "Savatchaga o'tish" })).toHaveAttribute('href', '/cart')
+  })
+
+  it('polls a pending order until it is reserved', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(NOW)
+    let reads = 0
+    const { callsTo } = setup({
+      [`GET ${DETAIL}`]: () =>
+        json(200, reads >= 2 ? withStatus('RESERVED') : withStatus('PENDING')),
+      [`GET ${STATUS}`]: () => {
+        reads += 1
+        return reads >= 2
+          ? json(200, { status: 'RESERVED', reserved_until: baseOrder.reserved_until })
+          : json(200, { status: 'PENDING', reserved_until: null })
+      },
+    })
+    expect(await screen.findByText('Mahsulotlar band qilinmoqda')).toBeInTheDocument()
+    await act(() => vi.advanceTimersByTimeAsync(2100))
+    expect(await screen.findByRole('timer')).toBeInTheDocument()
+    const polls = callsTo('GET', STATUS).length
+    await act(() => vi.advanceTimersByTimeAsync(10_000))
+    expect(callsTo('GET', STATUS)).toHaveLength(polls)
+  })
+
+  it('pays with the mock button and refetches the cart', async () => {
+    const u = userEvent.setup()
+    const reserved = withStatus('RESERVED')
+    const paid = withStatus('PAID', {
+      sellers: baseOrder.sellers.map((g, i) => ({
+        ...g,
+        sub_order_id: `so${i}`,
+        status: i === 0 ? 'NEW' : 'SHIPPED',
+      })),
+    })
+    const { queryClient } = setup({
+      [`GET ${DETAIL}`]: () => json(200, reserved),
+      [`GET ${STATUS}`]: statusOf(reserved),
+      [`POST /api/orders/${ID}/pay/mock/`]: () => json(200, paid),
+    })
+    // the header's cart, cached before paying
+    queryClient.setQueryData(queryKeys.cart, { items_count: 3 })
+    await u.click(await screen.findByRole('button', { name: "To'lash (test)" }))
+    expect(
+      await screen.findByText(
+        "Do'konlar buyurtmangizni yig'ishni boshlaydi. Holatini shu sahifada kuzating.",
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getAllByText("To'landi").length).toBeGreaterThan(0)
+    const rishton = screen.getByRole('region', { name: 'Rishton sopol' })
+    expect(within(rishton).getByText('Yangi')).toBeInTheDocument()
+    expect(
+      within(screen.getByRole('region', { name: "Marg'ilon atlas" })).getByText("Yo'lda"),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Buyurtmani bekor qilish' }),
+    ).not.toBeInTheDocument()
+    // the server cleared the cart: the cached one is stale now
+    expect(queryClient.getQueryState(queryKeys.cart)?.isInvalidated).toBe(true)
+  })
+
+  it('hides the mock button when the server has mock payments off', async () => {
+    const u = userEvent.setup()
+    const reserved = withStatus('RESERVED')
+    setup({
+      [`GET ${DETAIL}`]: () => json(200, reserved),
+      [`GET ${STATUS}`]: statusOf(reserved),
+      [`POST /api/orders/${ID}/pay/mock/`]: () => apiError(404, 'NOT_FOUND'),
+    })
+    await u.click(await screen.findByRole('button', { name: "To'lash (test)" }))
+    expect(await screen.findByText("Test to'lovi bu muhitda o'chirilgan.")).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: "To'lash (test)" })).not.toBeInTheDocument()
+    expect(screen.getByRole('timer')).toBeInTheDocument()
+  })
+
+  it('cancels after confirmation', async () => {
+    const u = userEvent.setup()
+    const reserved = withStatus('RESERVED')
+    const cancelled = withStatus('CANCELLED', { cancel_reason: 'CANCELLED_BY_CUSTOMER' })
+    const { callsTo } = setup({
+      [`GET ${DETAIL}`]: () => json(200, reserved),
+      [`GET ${STATUS}`]: statusOf(reserved),
+      [`POST /api/orders/${ID}/cancel/`]: () => json(200, cancelled),
+    })
+    await u.click(await screen.findByRole('button', { name: 'Buyurtmani bekor qilish' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Buyurtma bekor qilinsinmi?' })
+    await u.click(within(dialog).getByRole('button', { name: 'Qoldirish' }))
+    expect(callsTo('POST', `/api/orders/${ID}/cancel/`)).toHaveLength(0)
+
+    await u.click(screen.getByRole('button', { name: 'Buyurtmani bekor qilish' }))
+    await u.click(
+      within(await screen.findByRole('dialog')).getByRole('button', { name: 'Bekor qilish' }),
+    )
+    expect(await screen.findByText('Siz bekor qildingiz.')).toBeInTheDocument()
+    expect(screen.getAllByText('Buyurtma bekor qilindi').length).toBeGreaterThan(0)
+    expect(callsTo('POST', `/api/orders/${ID}/cancel/`)).toHaveLength(1)
+  })
+
+  it.each([
+    ['CANCELLED', { cancel_reason: 'OUT_OF_STOCK' }, 'Mahsulot omborda qolmagan edi.'],
+    ['COMPLETED', {}, 'Buyurtma yakunlandi'],
+    ['REFUNDED', {}, "To'langan summa kartangizga qaytariladi."],
+  ] as const)('renders %s', async (status, extra, text) => {
+    const order = withStatus(status, extra)
+    setup({ [`GET ${DETAIL}`]: () => json(200, order), [`GET ${STATUS}`]: statusOf(order) })
+    expect(await screen.findByText(text)).toBeInTheDocument()
+    expect(screen.queryByRole('timer')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Buyurtmani bekor qilish' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('shows not found for unknown or foreign orders', async () => {
+    setup({
+      [`GET ${DETAIL}`]: () => apiError(404, 'NOT_FOUND'),
+      [`GET ${STATUS}`]: () => apiError(404, 'NOT_FOUND'),
+    })
+    expect(await screen.findByRole('heading', { name: 'Buyurtma topilmadi' })).toBeInTheDocument()
+  })
+
+  it('sends guests to login', async () => {
+    const { router } = setup({}, false)
+    await waitFor(() => expect(router.state.location.pathname).toBe('/login'))
+    expect(router.state.location.search).toBe(`?next=${encodeURIComponent(`/orders/${ID}`)}`)
+  })
+})

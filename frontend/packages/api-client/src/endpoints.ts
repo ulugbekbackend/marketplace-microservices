@@ -4,7 +4,13 @@ import type {
   CartAddItemRequest,
   CartUpdateItemRequest,
   Category,
+  CheckoutRequest,
+  CheckoutResult,
   Favorites,
+  Order,
+  OrderListParams,
+  OrderStatusInfo,
+  OrderSummary,
   OtpVerifyResponse,
   Paginated,
   ProductDetail,
@@ -93,5 +99,28 @@ export function cartEndpoints(client: ApiClient) {
 
     removeFavorite: (productId: Uuid) =>
       client.delete<void>(`/api/cart/favorites/${seg(productId)}/`, withCookie),
+  }
+}
+
+export function orderEndpoints(client: ApiClient) {
+  return {
+    /** The key must be reused for retries of the same submit, so it is always passed in. */
+    checkout: (body: CheckoutRequest, idempotencyKey: string) =>
+      client.post<CheckoutResult>('/api/orders/checkout/', body, { idempotencyKey }),
+
+    /** Lightweight status for polling. */
+    status: (orderId: Uuid, signal?: AbortSignal) =>
+      client.get<OrderStatusInfo>(`/api/orders/${seg(orderId)}/status/`, { signal }),
+
+    detail: (orderId: Uuid, signal?: AbortSignal) =>
+      client.get<Order>(`/api/orders/${seg(orderId)}/`, { signal }),
+
+    list: (params: OrderListParams = {}, signal?: AbortSignal) =>
+      client.get<Paginated<OrderSummary>>('/api/orders/', { query: params, signal }),
+
+    cancel: (orderId: Uuid) => client.post<Order>(`/api/orders/${seg(orderId)}/cancel/`),
+
+    /** Dev only: 404 when mock payments are disabled on the server. */
+    payMock: (orderId: Uuid) => client.post<Order>(`/api/orders/${seg(orderId)}/pay/mock/`),
   }
 }

@@ -11,6 +11,9 @@ RUN pnpm install --frozen-lockfile --filter shop...
 
 ARG VITE_API_URL=http://api.localhost
 ENV VITE_API_URL=$VITE_API_URL
+# "true" shows the mock payment button (local and demo stacks only).
+ARG VITE_MOCK_PAYMENT=false
+ENV VITE_MOCK_PAYMENT=$VITE_MOCK_PAYMENT
 RUN pnpm --filter shop build
 
 FROM nginx:1.30.5-alpine

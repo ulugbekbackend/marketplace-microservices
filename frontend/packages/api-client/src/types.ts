@@ -11,6 +11,10 @@ import type {
   components as CatalogComponents,
   operations as CatalogOperations,
 } from './generated/catalog'
+import type {
+  components as OrderComponents,
+  operations as OrderOperations,
+} from './generated/order'
 
 type AuthSchemas = AuthComponents['schemas']
 type CatalogSchemas = CatalogComponents['schemas']
@@ -92,3 +96,41 @@ export type CartErrorCode =
   | 'FAVORITES_FULL'
   | 'CATALOG_UNAVAILABLE'
   | 'VALIDATION_ERROR'
+
+/* ------------------------------------------------------------------- order */
+
+type OrderSchemas = OrderComponents['schemas']
+
+export type OrderStatus = OrderSchemas['OrderStatusEnum']
+export type SubOrderStatus = OrderSchemas['SubOrderStatusEnum']
+export type DeliveryAddress = OrderSchemas['AddressRequest']
+export type CheckoutRequest = OrderSchemas['CheckoutRequest']
+export type CheckoutResult = OrderSchemas['CheckoutResult']
+export type Order = OrderSchemas['OrderDetail']
+export type OrderSellerGroup = OrderSchemas['SellerGroup']
+export type OrderItem = OrderSchemas['OrderItem']
+export type OrderHistoryEntry = OrderSchemas['OrderHistory']
+export type OrderStatusInfo = OrderSchemas['OrderStatus']
+export type OrderSummary = OrderSchemas['OrderSummary']
+export type OrderListParams = NonNullable<OrderOperations['orders_list']['parameters']['query']>
+
+/** Error codes returned by the order service (codes are not part of the OpenAPI schema). */
+export type OrderErrorCode =
+  | 'CART_EMPTY'
+  | 'ITEMS_UNAVAILABLE'
+  | 'IDEMPOTENCY_KEY_REQUIRED'
+  | 'IDEMPOTENCY_KEY_INVALID'
+  | 'IDEMPOTENCY_KEY_REUSED'
+  | 'IDEMPOTENCY_IN_PROGRESS'
+  | 'INVALID_TRANSITION'
+  | 'ORDER_EXPIRED'
+  | 'NOT_RESERVED'
+  | 'SERVICE_UNAVAILABLE'
+  | 'VALIDATION_ERROR'
+
+/** One entry of `details.items` in an `ITEMS_UNAVAILABLE` error. */
+export type UnavailableItem = {
+  variant_id: Uuid
+  reason: 'not_found' | 'inactive' | 'out_of_stock'
+  available: number
+}

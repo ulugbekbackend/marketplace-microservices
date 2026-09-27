@@ -1,6 +1,6 @@
 import { useLogout, useMe, useSession } from '@bozorcha/api-client'
 import { Badge, cn, Skeleton, useToast } from '@bozorcha/ui'
-import { LogOut, UserRound } from 'lucide-react'
+import { ClipboardList, LogOut, UserRound } from 'lucide-react'
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useLocation, useNavigate } from 'react-router'
@@ -142,6 +142,18 @@ function SignedInMenu() {
               </>
             )}
           </div>
+          <Link
+            to="/orders"
+            role="menuitem"
+            onClick={() => close(false)}
+            className={cn(
+              'mt-1 flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-text',
+              'transition-colors duration-150 ease-out hover:bg-surface-2 focus:bg-surface-2 focus:outline-none',
+            )}
+          >
+            <ClipboardList aria-hidden="true" size={18} strokeWidth={1.75} />
+            {t('header.orders')}
+          </Link>
           <button
             type="button"
             role="menuitem"

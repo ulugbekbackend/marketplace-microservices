@@ -26,6 +26,7 @@ export const apiClient = createApiClient({
   onSessionExpired: () => {
     queryClient.removeQueries({ queryKey: queryKeys.me })
     queryClient.removeQueries({ queryKey: queryKeys.favorites })
+    queryClient.removeQueries({ queryKey: queryKeys.orders })
     // The customer's cart is no longer reachable: show the guest's instead.
     void queryClient.resetQueries({ queryKey: queryKeys.cart })
     sessionExpiredListeners.forEach((listener) => listener())

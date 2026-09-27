@@ -46,11 +46,12 @@ export function useLogout() {
   const queryClient = useQueryClient()
   return useMutation<void, ApiError, void>({
     mutationFn: () => auth.logout(),
-    // Local tokens are cleared even if the server call fails. The customer's cart and favorites
+    // Local tokens are cleared even if the server call fails. The customer's cart, favorites and orders
     // must not stay on screen: the cart is refetched as the guest's.
     onSettled: () => {
       queryClient.removeQueries({ queryKey: queryKeys.me })
       queryClient.removeQueries({ queryKey: queryKeys.favorites })
+      queryClient.removeQueries({ queryKey: queryKeys.orders })
       void queryClient.resetQueries({ queryKey: queryKeys.cart })
     },
   })
