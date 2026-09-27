@@ -263,6 +263,8 @@ services:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
       rabbitmq: {condition: service_healthy}
+      catalog: {condition: service_healthy}
+      cart: {condition: service_healthy}
     healthcheck: *python-healthcheck
     labels:
       - traefik.enable=true
