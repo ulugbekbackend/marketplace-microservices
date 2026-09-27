@@ -1,0 +1,591 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Cart service",
+    "version": "0.2.0"
+  },
+  "paths": {
+    "/api/cart/favorites/": {
+      "get": {
+        "tags": ["favorites"],
+        "summary": "List Favorites",
+        "operationId": "list_favorites_api_cart_favorites__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FavoritesOut"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["favorites"],
+        "summary": "Add Favorite",
+        "description": "Idempotent: adding a product twice keeps one entry.",
+        "operationId": "add_favorite_api_cart_favorites__post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FavoriteIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FavoritesOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/cart/favorites/{product_id}/": {
+      "delete": {
+        "tags": ["favorites"],
+        "summary": "Remove Favorite",
+        "operationId": "remove_favorite_api_cart_favorites__product_id___delete",
+        "parameters": [
+          {
+            "name": "product_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Product Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/cart/": {
+      "get": {
+        "tags": ["cart"],
+        "summary": "Get Cart",
+        "description": "Items grouped by seller, with the current price and stock from the catalog.",
+        "operationId": "get_cart_api_cart__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CartOut"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": ["cart"],
+        "summary": "Clear Cart",
+        "operationId": "clear_cart_api_cart__delete",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        }
+      }
+    },
+    "/api/cart/items/": {
+      "post": {
+        "tags": ["cart"],
+        "summary": "Add Item",
+        "description": "Add units of a variant; an item already in the cart grows (up to 99).",
+        "operationId": "add_item_api_cart_items__post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddItemIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CartOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/cart/items/{variant_id}/": {
+      "patch": {
+        "tags": ["cart"],
+        "summary": "Update Item",
+        "description": "Set the quantity; 0 removes the item.",
+        "operationId": "update_item_api_cart_items__variant_id___patch",
+        "parameters": [
+          {
+            "name": "variant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Variant Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateItemIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CartOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": ["cart"],
+        "summary": "Remove Item",
+        "operationId": "remove_item_api_cart_items__variant_id___delete",
+        "parameters": [
+          {
+            "name": "variant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Variant Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CartOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/cart/merge/": {
+      "post": {
+        "tags": ["cart"],
+        "summary": "Merge Cart",
+        "description": "Right after login: move the guest cart (cookie) into the customer's cart.",
+        "operationId": "merge_cart_api_cart_merge__post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CartOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AddItemIn": {
+        "properties": {
+          "variant_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Variant Id"
+          },
+          "qty": {
+            "type": "integer",
+            "maximum": 99.0,
+            "minimum": 1.0,
+            "title": "Qty",
+            "default": 1
+          }
+        },
+        "type": "object",
+        "required": ["variant_id"],
+        "title": "AddItemIn"
+      },
+      "CartItemOut": {
+        "properties": {
+          "variant_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Variant Id"
+          },
+          "product_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Product Id"
+          },
+          "product_slug": {
+            "type": "string",
+            "title": "Product Slug"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "sku": {
+            "type": "string",
+            "title": "Sku"
+          },
+          "image_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Url"
+          },
+          "attributes": {
+            "items": {
+              "$ref": "#/components/schemas/VariantAttribute"
+            },
+            "type": "array",
+            "title": "Attributes"
+          },
+          "qty": {
+            "type": "integer",
+            "title": "Qty"
+          },
+          "price_tiyin": {
+            "type": "integer",
+            "title": "Price Tiyin",
+            "description": "Current catalog price."
+          },
+          "line_total_tiyin": {
+            "type": "integer",
+            "title": "Line Total Tiyin"
+          },
+          "available_qty": {
+            "type": "integer",
+            "title": "Available Qty",
+            "description": "Units the catalog can still sell right now."
+          },
+          "available": {
+            "type": "boolean",
+            "title": "Available",
+            "description": "Active and enough stock for the requested quantity."
+          },
+          "price_changed": {
+            "type": "boolean",
+            "title": "Price Changed",
+            "description": "The price differs from the one the customer saw."
+          },
+          "previous_price_tiyin": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Price Tiyin",
+            "description": "The price the customer saw, when it changed."
+          }
+        },
+        "type": "object",
+        "required": [
+          "variant_id",
+          "product_id",
+          "product_slug",
+          "title",
+          "sku",
+          "image_url",
+          "attributes",
+          "qty",
+          "price_tiyin",
+          "line_total_tiyin",
+          "available_qty",
+          "available",
+          "price_changed",
+          "previous_price_tiyin"
+        ],
+        "title": "CartItemOut"
+      },
+      "CartOut": {
+        "properties": {
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/SellerGroupOut"
+            },
+            "type": "array",
+            "title": "Groups"
+          },
+          "total_tiyin": {
+            "type": "integer",
+            "title": "Total Tiyin",
+            "description": "Sum of the available items only."
+          },
+          "items_count": {
+            "type": "integer",
+            "title": "Items Count",
+            "description": "Total quantity of all items."
+          },
+          "has_unavailable": {
+            "type": "boolean",
+            "title": "Has Unavailable"
+          },
+          "has_price_changes": {
+            "type": "boolean",
+            "title": "Has Price Changes"
+          },
+          "removed": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Removed",
+            "description": "Variants dropped from the cart because they no longer exist."
+          }
+        },
+        "type": "object",
+        "required": [
+          "groups",
+          "total_tiyin",
+          "items_count",
+          "has_unavailable",
+          "has_price_changes",
+          "removed"
+        ],
+        "title": "CartOut"
+      },
+      "FavoriteIn": {
+        "properties": {
+          "product_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Product Id"
+          }
+        },
+        "type": "object",
+        "required": ["product_id"],
+        "title": "FavoriteIn"
+      },
+      "FavoritesOut": {
+        "properties": {
+          "items": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": ["items"],
+        "title": "FavoritesOut"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "SellerGroupOut": {
+        "properties": {
+          "seller_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Seller Id"
+          },
+          "shop_name": {
+            "type": "string",
+            "title": "Shop Name"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CartItemOut"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "subtotal_tiyin": {
+            "type": "integer",
+            "title": "Subtotal Tiyin",
+            "description": "Sum of the available items only."
+          }
+        },
+        "type": "object",
+        "required": ["seller_id", "shop_name", "items", "subtotal_tiyin"],
+        "title": "SellerGroupOut"
+      },
+      "UpdateItemIn": {
+        "properties": {
+          "qty": {
+            "type": "integer",
+            "maximum": 99.0,
+            "minimum": 0.0,
+            "title": "Qty",
+            "description": "0 removes the item."
+          }
+        },
+        "type": "object",
+        "required": ["qty"],
+        "title": "UpdateItemIn"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": ["loc", "msg", "type"],
+        "title": "ValidationError"
+      },
+      "VariantAttribute": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "value": {
+            "type": "string",
+            "title": "Value"
+          }
+        },
+        "type": "object",
+        "required": ["code", "name", "value"],
+        "title": "VariantAttribute"
+      }
+    }
+  }
+}
