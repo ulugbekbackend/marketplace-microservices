@@ -116,6 +116,10 @@ export function sellerCatalogEndpoints(client: ApiClient) {
     attachImage: (productId: Uuid, body: ImageAttachRequest) =>
       client.post<SellerImage>(`${base}/products/${seg(productId)}/images/`, body),
 
+    /** 204; the remaining images are renumbered from 0. */
+    deleteImage: (productId: Uuid, imageId: Uuid) =>
+      client.delete<void>(`${base}/products/${seg(productId)}/images/${seg(imageId)}/`),
+
     attributes: (signal?: AbortSignal) =>
       client.get<Attribute[]>('/api/catalog/attributes/', { signal }),
   }

@@ -12,6 +12,7 @@ import {
   useSellerApplication,
   useSellerProduct,
   useSellerProducts,
+  useDeleteProductImage,
   useUpdateVariantStock,
 } from '../src/hooks/seller'
 import { TokenStore } from '../src/tokens'
@@ -42,6 +43,8 @@ const product: SellerProductDetail = {
   max_price_tiyin: 25_000_000,
   in_stock: true,
   variants_count: 1,
+  stock_total: 10,
+  reserved_total: 3,
   image_url: null,
   created_at: '2026-09-01T10:00:00Z',
   updated_at: '2026-09-01T10:00:00Z',
@@ -177,6 +180,56 @@ describe('seller catalog hooks', () => {
       queryClient.getQueryData<SellerProductDetail>(queryKeys.sellerProduct('p1'))!.variants[0]!
         .stock,
     ).toBe(10)
+  })
+})
+
+describe('image deletion', () => {
+  const images = [
+    { id: 'i1', position: 0, status: 'ready' },
+    { id: 'i2', position: 1, status: 'failed' },
+  ] as unknown as SellerProductDetail['images']
+  const withImages: SellerProductDetail = { ...product, images }
+  const cached = (queryClient: QueryClient) =>
+    queryClient.getQueryData<SellerProductDetail>(queryKeys.sellerProduct('p1'))!.images
+
+  it('removes the tile at once, then refetches the product and the lists', async () => {
+    const release = deferred()
+    const { wrapper, queryClient, server } = setup({
+      'DELETE /api/catalog/seller/products/p1/images/i2/': async () => {
+        await release.promise
+        return new Response(null, { status: 204 })
+      },
+      'GET /api/catalog/seller/products/p1/': () =>
+        json(200, { ...withImages, images: [images[0]] }),
+    })
+    queryClient.setQueryData(queryKeys.sellerProduct('p1'), withImages)
+    queryClient.setQueryData(queryKeys.sellerProductList({ page: 1 }), { items: [] })
+    const { result } = renderHook(() => useDeleteProductImage(), { wrapper })
+
+    act(() => result.current.mutate({ productId: 'p1', imageId: 'i2' }))
+    await waitFor(() => expect(cached(queryClient).map((image) => image.id)).toEqual(['i1']))
+    release.resolve()
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(server.callsTo('DELETE', '/api/catalog/seller/products/p1/images/i2/')).toHaveLength(1)
+    // No component observes the queries here, so invalidation marks them stale for the next read.
+    expect(queryClient.getQueryState(queryKeys.sellerProduct('p1'))?.isInvalidated).toBe(true)
+    expect(queryClient.getQueryState(queryKeys.sellerProductList({ page: 1 }))?.isInvalidated).toBe(
+      true,
+    )
+  })
+
+  it('puts the image back when the server refuses', async () => {
+    const { wrapper, queryClient } = setup({
+      'DELETE /api/catalog/seller/products/p1/images/i1/': () => json(500, errorBody('BOOM')),
+      'GET /api/catalog/seller/products/p1/': () => json(200, withImages),
+    })
+    queryClient.setQueryData(queryKeys.sellerProduct('p1'), withImages)
+    const { result } = renderHook(() => useDeleteProductImage(), { wrapper })
+    await act(async () => {
+      await result.current.mutateAsync({ productId: 'p1', imageId: 'i1' }).catch(() => undefined)
+    })
+    await waitFor(() => expect(result.current.error?.code).toBe('BOOM'))
+    expect(cached(queryClient).map((image) => image.id)).toEqual(['i1', 'i2'])
   })
 })
 

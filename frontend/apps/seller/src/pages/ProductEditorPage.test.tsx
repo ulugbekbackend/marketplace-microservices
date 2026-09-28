@@ -144,6 +144,94 @@ describe('ProductEditorPage: saving', () => {
     )
   })
 
+  /** A new "Choynak" with its single plain variant, chosen to go on sale. */
+  async function fillActiveProduct(u: ReturnType<typeof userEvent.setup>) {
+    await u.type(await screen.findByLabelText('Nomi'), 'Choynak')
+    await u.selectOptions(screen.getByLabelText('Kategoriya'), 'c-ayollar')
+    await u.type(screen.getByRole('textbox', { name: "Narx, so'm: Asosiy" }), '185000')
+    await u.selectOptions(screen.getByLabelText('Mahsulot holati'), 'active')
+  }
+
+  function newProductApi(activate: Route) {
+    const created = productDetail({ id: 'p9', title: 'Choynak', status: 'draft', variants: [] })
+    let stored = created
+    return {
+      'POST /api/catalog/seller/products/': () => json(201, created),
+      'POST /api/catalog/seller/products/p9/variants/': (body: unknown) => {
+        const made = variant({ id: 'v-new', sku: (body as { sku: string }).sku, attributes: [] })
+        stored = { ...stored, variants: [made] }
+        return json(201, made)
+      },
+      'PATCH /api/catalog/seller/products/p9/': async (body: unknown, url: URL) => {
+        const response = await activate(body, url)
+        if (response.ok) stored = { ...stored, status: 'active' }
+        return response
+      },
+      'GET /api/catalog/seller/products/p9/': () => json(200, stored),
+    } satisfies Record<string, Route>
+  }
+
+  it('creates a product for sale as a draft and activates it after its variants', async () => {
+    const u = userEvent.setup()
+    const { callsTo, router, fetchMock } = setup(newProductApi(() => json(200, {})))
+    await fillActiveProduct(u)
+    await u.click(saveButton())
+    await waitFor(() => expect(router.state.location.pathname).toBe('/products/p9'))
+    expect(await screen.findByText('Mahsulot saqlandi')).toBeInTheDocument()
+
+    expect(bodyOf(callsTo('POST', '/api/catalog/seller/products/')[0]).status).toBe('draft')
+    const variantCalls = callsTo('POST', '/api/catalog/seller/products/p9/variants/')
+    const activateCalls = callsTo('PATCH', '/api/catalog/seller/products/p9/')
+    expect(variantCalls).toHaveLength(1)
+    expect(activateCalls.map(bodyOf)).toEqual([{ status: 'active' }])
+    const position = (call: unknown) => fetchMock.mock.calls.indexOf(call as never)
+    expect(position(activateCalls[0])).toBeGreaterThan(position(variantCalls[0]))
+    expect(screen.getAllByText('Sotuvda').length).toBeGreaterThan(0)
+  })
+
+  it('keeps the draft and says why when the activation is refused', async () => {
+    const u = userEvent.setup()
+    const reason = 'A product needs at least one active variant before it can be active.'
+    const { router } = setup(
+      newProductApi(() => apiError(400, 'VALIDATION_ERROR', { status: [reason] })),
+    )
+    await fillActiveProduct(u)
+    await u.click(saveButton())
+    await waitFor(() => expect(router.state.location.pathname).toBe('/products/p9'))
+    const alert = await screen.findByText(/sotuvga chiqmadi: mahsulot qoralamada qoldi/)
+    expect(alert).toHaveTextContent(`Sabab: ${reason}`)
+    expect(screen.getByText('Mahsulot saqlandi, lekin hammasi emas')).toBeInTheDocument()
+  })
+
+  it('explains that the last active variant of a product on sale cannot be switched off', async () => {
+    const u = userEvent.setup()
+    const product = productDetail({
+      variants: [
+        variant(),
+        variant({
+          id: 'v2',
+          sku: 'ATLAS-KOK',
+          attributes: [{ value_id: 'blue', value: "Ko'k", code: 'color', name: 'Rang' }],
+        }),
+      ],
+    })
+    setup(
+      {
+        'GET /api/catalog/seller/products/p1/': () => json(200, product),
+        'PATCH /api/catalog/seller/variants/v1/': () =>
+          apiError(409, 'LAST_ACTIVE_VARIANT', { variant_id: 'v1' }),
+      },
+      '/products/p1',
+    )
+    await u.click(await screen.findByRole('button', { name: 'Olib tashlash: Qizil' }))
+    await u.click(saveButton())
+    expect(
+      await screen.findByText(
+        "Faol mahsulotning oxirgi faol variantini o'chirib bo'lmaydi — avval qoralamaga o'tkazing",
+      ),
+    ).toBeInTheDocument()
+  })
+
   it('shows not found for a product of another shop', async () => {
     setup(
       { 'GET /api/catalog/seller/products/zzz/': () => apiError(404, 'NOT_FOUND') },
@@ -270,4 +358,87 @@ describe('ProductEditorPage: images', () => {
     )
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:preview')
   }, 10_000)
+
+  const image = (id: string, position: number, status: 'ready' | 'failed') => ({
+    id,
+    position,
+    status,
+    original_key: `products/p1/${id}.png`,
+    thumb_url: status === 'ready' ? `http://s3.test/${id}.webp` : null,
+    medium_url: null,
+    large_url: null,
+    created_at: '2026-09-01T00:00:00Z',
+  })
+
+  function withImages(remove: Route) {
+    let images = [image('img1', 0, 'ready'), image('img2', 1, 'failed')]
+    return setup(
+      {
+        'GET /api/catalog/seller/products/p1/': () =>
+          json(200, productDetail({ images: images as never })),
+        'DELETE /api/catalog/seller/products/p1/images/img2/': async (body, url) => {
+          const response = await remove(body, url)
+          if (response.ok) images = [images[0]!]
+          return response
+        },
+      },
+      '/products/p1',
+    )
+  }
+
+  it('deletes a failed image after confirmation', async () => {
+    const u = userEvent.setup()
+    const { callsTo } = withImages(() => new Response(null, { status: 204 }))
+    const list = await screen.findByRole('list', { name: 'Mahsulot rasmlari' })
+    expect(
+      within(list).getByText("Rasmni o'qib bo'lmadi. O'chirib, boshqasini yuklang"),
+    ).toBeInTheDocument()
+    expect(within(list).getAllByRole('button', { name: /^O'chirish:/ })).toHaveLength(2)
+
+    await u.click(within(list).getByRole('button', { name: "O'chirish: 2-rasm" }))
+    const dialog = await screen.findByRole('dialog', { name: "Rasm o'chirilsinmi?" })
+    await u.click(within(dialog).getByRole('button', { name: 'Qoldirish' }))
+    expect(callsTo('DELETE', '/api/catalog/seller/products/p1/images/img2/')).toHaveLength(0)
+
+    await u.click(within(list).getByRole('button', { name: "O'chirish: 2-rasm" }))
+    await u.click(
+      within(await screen.findByRole('dialog')).getByRole('button', { name: "O'chirish" }),
+    )
+    expect(await screen.findByText("2-rasm o'chirildi")).toBeInTheDocument()
+    expect(callsTo('DELETE', '/api/catalog/seller/products/p1/images/img2/')).toHaveLength(1)
+    await waitFor(() => expect(within(list).getAllByRole('listitem')).toHaveLength(1))
+  })
+
+  it('puts the image back when the delete fails', async () => {
+    const u = userEvent.setup()
+    withImages(() => apiError(500, 'BOOM'))
+    const list = await screen.findByRole('list', { name: 'Mahsulot rasmlari' })
+    await u.click(within(list).getByRole('button', { name: "O'chirish: 2-rasm" }))
+    await u.click(
+      within(await screen.findByRole('dialog')).getByRole('button', { name: "O'chirish" }),
+    )
+    expect(await screen.findByText("Rasmni o'chirib bo'lmadi, u joyiga qaytdi")).toBeInTheDocument()
+    await waitFor(() => expect(within(list).getAllByRole('listitem')).toHaveLength(2))
+  })
+
+  it('drops a failed local upload without asking the server', async () => {
+    setup(
+      {
+        'GET /api/catalog/seller/products/p1/': () => json(200, productDetail()),
+        'POST /api/catalog/seller/uploads/presign/': () => apiError(400, 'VALIDATION_ERROR'),
+      },
+      '/products/p1',
+    )
+    const input = await screen.findByTestId('image-input')
+    fireEvent.change(input, {
+      target: { files: [new File(['png'], 'atlas.png', { type: 'image/png' })] },
+    })
+    const list = await screen.findByRole('list', { name: 'Mahsulot rasmlari' })
+    const remove = await within(list).findByRole('button', { name: "O'chirish: atlas.png" })
+    fireEvent.click(remove)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.queryByRole('list', { name: 'Mahsulot rasmlari' })).not.toBeInTheDocument(),
+    )
+  })
 })

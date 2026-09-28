@@ -28,6 +28,11 @@ export type SaveResult = {
   rows: VariantRow[]
   /** Per-row failures, keyed by row key. Empty when everything was saved. */
   failures: Record<string, RowErrors>
+  /**
+   * Set when the product was meant to go on sale but stayed a draft: the final activation
+   * failed, or no variant got saved. Everything else was saved.
+   */
+  activation: FieldError | null
 }
 
 /** Maps a variant request failure to the field it concerns. */
@@ -47,6 +52,8 @@ export function variantFailure(error: unknown): RowErrors {
     }
     case 'VARIANT_EXISTS':
       return { row: { key: 'variantExists' } }
+    case 'LAST_ACTIVE_VARIANT':
+      return { row: { key: 'lastActiveVariant' } }
     case CLIENT_ERROR.NETWORK:
       return { row: { key: 'network' } }
     default:
@@ -89,20 +96,33 @@ const savedRow = (row: VariantRow, variant: SellerVariant): VariantRow => ({
  * get only the fields that changed (price and SKU, active flag, stock separately). A failing
  * variant does not stop the others; its error is returned for the row. Product errors throw.
  * Prices are validated beforehand, so every price here converts to integer tiyin.
+ *
+ * The server only lets a product be active with an active variant, so going on sale happens
+ * last: a new product is created as a draft, and `status: 'active'` is sent after the variant
+ * loop (only when at least one active variant exists). Moving to draft or archived goes first,
+ * as before, so deactivating the last variant of a product being taken off sale is allowed.
+ * If activation fails, the saved product and variants are kept and `activation` says why.
  */
 export async function saveProduct(api: SellerApi, input: SaveInput): Promise<SaveResult> {
   const { values } = input
+  const wantsActive = values.status === 'active'
   let productId = input.productId
+  let activate = false
   if (!productId) {
     const created = await api.createProduct({
       title: values.title.trim(),
       description: values.description,
       category_id: values.category_id,
-      status: values.status === 'archived' ? 'draft' : values.status,
+      status: 'draft',
     })
     productId = created.id
+    activate = wantsActive
   } else if (input.baseline) {
     const changes = productChanges(values, input.baseline)
+    if (changes.status === 'active') {
+      delete changes.status
+      activate = true
+    }
     if (Object.keys(changes).length) await api.updateProduct(productId, changes)
   }
 
@@ -159,8 +179,32 @@ export async function saveProduct(api: SellerApi, input: SaveInput): Promise<Sav
     }
   }
 
+  let activation: FieldError | null = null
+  if (activate) {
+    const sellable = rows.some((row) => row.variantId && row.original?.active && !row.removed)
+    if (!sellable) {
+      activation = { key: 'activateNoVariant' }
+    } else {
+      try {
+        await api.updateProduct(productId, { status: 'active' })
+      } catch (error) {
+        const message = statusMessage(error)
+        activation = message
+          ? { key: 'activateRejected', params: { message } }
+          : { key: 'activateFailed' }
+      }
+    }
+  }
+
   const product = await api.product(productId)
-  return { product, rows, failures }
+  return { product, rows, failures, activation }
+}
+
+/** The first message of `details.status` in a 400, e.g. "needs an active variant". */
+function statusMessage(error: unknown): string | null {
+  const status = errorDetail(error, 'status')
+  if (Array.isArray(status) && typeof status[0] === 'string') return status[0]
+  return typeof status === 'string' ? status : null
 }
 
 /** i18n key under `productForm.errors` for a product request that failed. */
@@ -168,6 +212,9 @@ export function productSaveError(error: unknown): FieldError {
   if (!isApiError(error)) return { key: 'unknown' }
   if (error.code === CLIENT_ERROR.NETWORK) return { key: 'network' }
   if (error.code === 'SELLER_NOT_FOUND') return { key: 'shopNotReady' }
-  if (error.code === 'VALIDATION_ERROR' || error.status === 400) return { key: 'rejected' }
+  if (error.code === 'VALIDATION_ERROR' || error.status === 400) {
+    const message = statusMessage(error)
+    return message ? { key: 'statusRejected', params: { message } } : { key: 'rejected' }
+  }
   return { key: 'unknown' }
 }

@@ -175,7 +175,11 @@ function ProductForm({ productId, initial, live, attributes, categories }: Produ
       queryClient.setQueryData(queryKeys.sellerProduct(result.product.id), result.product)
       void invalidateSellerLists(queryClient)
       const failedCount = Object.keys(result.failures).length
-      if (failedCount === 0) {
+      // Stayed a draft although "Sotuvda" was chosen: say so where the save errors show.
+      setSaveError(result.activation)
+      if (result.activation) {
+        toast({ tone: 'danger', title: t('productForm.partiallySaved') })
+      } else if (failedCount === 0) {
         toast({ tone: 'success', title: t('productForm.saved') })
       } else {
         toast({
@@ -253,7 +257,10 @@ function ProductForm({ productId, initial, live, attributes, categories }: Produ
               strokeWidth={1.75}
               className="mt-px shrink-0"
             />
-            {t(`productForm.errors.${saveError.key}` as 'productForm.errors.unknown')}
+            {t(
+              `productForm.errors.${saveError.key}` as 'productForm.errors.unknown',
+              saveError.params,
+            )}
           </div>
         )}
 

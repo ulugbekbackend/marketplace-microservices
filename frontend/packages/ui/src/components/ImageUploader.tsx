@@ -1,4 +1,4 @@
-import { CircleAlert, ImagePlus, RotateCw } from 'lucide-react'
+import { CircleAlert, ImagePlus, RotateCw, Trash2 } from 'lucide-react'
 import { useId, useRef, useState, type DragEvent, type ReactNode } from 'react'
 import { cn } from '../lib/cn'
 import { Spinner } from './Spinner'
@@ -24,6 +24,8 @@ export type UploadItem = {
   error?: ReactNode
   /** A failed tile offers retry unless this is false (e.g. the server rejected the image). */
   retryable?: boolean
+  /** Shows a remove button on the tile (needs `onRemove` and `labels.remove`). */
+  removable?: boolean
 }
 
 export type ImageUploaderLabels = {
@@ -41,6 +43,8 @@ export type ImageUploaderLabels = {
   ready: string
   failed: string
   retry: string
+  /** Accessible name of a tile's remove button, e.g. "3-rasmni o'chirish". */
+  remove?: (name: string) => string
 }
 
 export type ImageUploaderProps = {
@@ -50,6 +54,8 @@ export type ImageUploaderProps = {
   /** Called with the files that did not (wrong type or too large). */
   onReject?: (rejections: ImageRejection[]) => void
   onRetry?: (id: string) => void
+  /** Called when a removable tile's remove button is pressed (confirm before deleting). */
+  onRemove?: (id: string) => void
   accept?: readonly string[]
   maxBytes?: number
   multiple?: boolean
@@ -79,6 +85,7 @@ export function ImageUploader({
   onFiles,
   onReject,
   onRetry,
+  onRemove,
   accept = IMAGE_TYPES,
   maxBytes = IMAGE_MAX_BYTES,
   multiple = true,
@@ -178,7 +185,13 @@ export function ImageUploader({
           className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-5"
         >
           {items.map((item) => (
-            <UploadTile key={item.id} item={item} labels={labels} onRetry={onRetry} />
+            <UploadTile
+              key={item.id}
+              item={item}
+              labels={labels}
+              onRetry={onRetry}
+              onRemove={onRemove}
+            />
           ))}
         </ul>
       )}
@@ -190,10 +203,12 @@ function UploadTile({
   item,
   labels,
   onRetry,
+  onRemove,
 }: {
   item: UploadItem
   labels: ImageUploaderLabels
   onRetry?: (id: string) => void
+  onRemove?: (id: string) => void
 }) {
   const percent = Math.round((item.progress ?? 0) * 100)
   const statusText =
@@ -221,6 +236,17 @@ function UploadTile({
         />
       ) : (
         <span className="sr-only">{item.name}</span>
+      )}
+
+      {item.removable && onRemove && labels.remove && (
+        <button
+          type="button"
+          aria-label={labels.remove(item.name)}
+          onClick={() => onRemove(item.id)}
+          className="absolute top-1 right-1 z-10 grid size-9 place-items-center rounded-full border border-border bg-surface/95 text-text shadow-soft transition-colors duration-150 ease-out hover:bg-danger-soft hover:text-danger-ink focus-ring"
+        >
+          <Trash2 aria-hidden="true" size={16} strokeWidth={1.75} />
+        </button>
       )}
 
       {item.status === 'ready' ? (

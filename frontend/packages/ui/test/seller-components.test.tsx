@@ -111,6 +111,43 @@ const file = (name: string, type: string, size = 1024) => {
 }
 
 describe('ImageUploader', () => {
+  it('offers a remove button only on removable tiles', async () => {
+    const onRemove = vi.fn()
+    const items: UploadItem[] = [
+      { id: 'a', name: '1-rasm', previewUrl: null, status: 'ready', removable: true },
+      {
+        id: 'b',
+        name: '2-rasm',
+        previewUrl: null,
+        status: 'failed',
+        error: 'Xato',
+        retryable: false,
+        removable: true,
+      },
+      { id: 'c', name: 'c.png', previewUrl: null, status: 'uploading', progress: 0.5 },
+    ]
+    render(
+      <ImageUploader
+        items={items}
+        onFiles={vi.fn()}
+        onRemove={onRemove}
+        labels={{ ...labels, remove: (name) => `O'chirish: ${name}` }}
+      />,
+    )
+    expect(screen.getAllByRole('button', { name: /^O'chirish:/ })).toHaveLength(2)
+    await userEvent.click(screen.getByRole('button', { name: "O'chirish: 2-rasm" }))
+    expect(onRemove).toHaveBeenCalledWith('b')
+    expect(screen.queryByRole('button', { name: 'Qayta' })).not.toBeInTheDocument()
+  })
+
+  it('shows no remove button without onRemove or a label', () => {
+    const items: UploadItem[] = [
+      { id: 'a', name: '1-rasm', previewUrl: null, status: 'ready', removable: true },
+    ]
+    render(<ImageUploader items={items} onFiles={vi.fn()} labels={labels} />)
+    expect(screen.queryByRole('button', { name: /1-rasm/ })).not.toBeInTheDocument()
+  })
+
   it('validates type and size', () => {
     expect(validateImageFile(file('a.png', 'image/png'))).toBeNull()
     expect(validateImageFile(file('a.gif', 'image/gif'))).toBe('type')

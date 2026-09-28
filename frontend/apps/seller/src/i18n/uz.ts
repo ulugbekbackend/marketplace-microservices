@@ -226,6 +226,15 @@ export const uz = {
       shopNotReady:
         "Do'koningiz hali tayyorlanmoqda. Bir necha soniyadan keyin qayta urinib ko'ring.",
       rejected: "Ma'lumotlar qabul qilinmadi. Maydonlarni tekshiring.",
+      statusRejected: 'Holat saqlanmadi: {{message}}',
+      lastActiveVariant:
+        "Faol mahsulotning oxirgi faol variantini o'chirib bo'lmaydi — avval qoralamaga o'tkazing",
+      activateFailed:
+        "Mahsulot va variantlar saqlandi, lekin sotuvga chiqmadi: mahsulot qoralamada qoldi. Qayta saqlab ko'ring.",
+      activateRejected:
+        'Mahsulot va variantlar saqlandi, lekin sotuvga chiqmadi: mahsulot qoralamada qoldi. Sabab: {{message}}',
+      activateNoVariant:
+        'Mahsulot qoralama sifatida saqlandi: sotuvga chiqarish uchun kamida bitta variant saqlanishi kerak.',
     },
   },
   matrix: {
@@ -270,11 +279,19 @@ export const uz = {
     saveFirst: 'Rasm yuklash uchun avval mahsulotni saqlang',
     wrongType: 'Faqat JPG, PNG yoki WEBP rasm yuklash mumkin',
     tooLarge: 'Rasm {{max}} MB dan katta',
+    remove: "O'chirish: {{name}}",
+    deleteTitle: "Rasm o'chirilsinmi?",
+    deleteDescription: "{{name}} mahsulotdan olib tashlanadi. Bu amalni qaytarib bo'lmaydi.",
+    deleteConfirm: "O'chirish",
+    keep: 'Qoldirish',
+    deleted: "{{name}} o'chirildi",
+    deleteFailed: "Rasmni o'chirib bo'lmadi, u joyiga qaytdi",
     errors: {
       network: 'Aloqa uzildi',
       rejected: 'Rasm qabul qilinmadi',
       storage: 'Havola eskirdi, qayta urining',
       unknown: "Yuklab bo'lmadi",
+      processingFailed: "Rasmni o'qib bo'lmadi. O'chirib, boshqasini yuklang",
     },
   },
   dashboard: {

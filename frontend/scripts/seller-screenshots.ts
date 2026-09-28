@@ -212,6 +212,8 @@ const details = seeds.map((seed, i) => {
     max_price_tiyin: prices.length ? Math.max(...prices) : null,
     in_stock: variants.some((v) => v.available > 0),
     variants_count: variants.length,
+    stock_total: variants.reduce((sum, v) => sum + v.stock, 0),
+    reserved_total: variants.reduce((sum, v) => sum + v.reserved, 0),
     image_url: seed.image === null ? null : img(seed.image),
     created_at: at(10 - i),
     updated_at: at(1),

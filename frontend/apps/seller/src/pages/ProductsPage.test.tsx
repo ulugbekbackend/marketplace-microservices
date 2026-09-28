@@ -14,6 +14,8 @@ const draft = productDetail({
   variants_count: 0,
   min_price_tiyin: null,
   max_price_tiyin: null,
+  stock_total: 0,
+  reserved_total: 0,
 })
 
 function setup(api: Record<string, Route> = {}, entry = '/products') {
@@ -23,7 +25,7 @@ function setup(api: Record<string, Route> = {}, entry = '/products') {
     'GET /api/catalog/seller/products/': (_body, url) => {
       const status = url.searchParams.get('status')
       const q = url.searchParams.get('q')
-      let items = [detail, draft].map(listItem)
+      let items = [stored, draft].map(listItem)
       if (status) items = items.filter((item) => item.status === status)
       if (q) items = items.filter((item) => item.title.toLowerCase().includes(q.toLowerCase()))
       return json(200, { items, total: items.length, page: 1, page_size: 20 })
@@ -32,7 +34,11 @@ function setup(api: Record<string, Route> = {}, entry = '/products') {
     'GET /api/catalog/seller/products/p2/': () => json(200, draft),
     'PATCH /api/catalog/seller/variants/v1/stock/': (body) => {
       const { stock } = body as { stock: number }
-      stored = { ...stored, variants: [variant({ stock, available: stock - 2 })] }
+      stored = {
+        ...stored,
+        stock_total: stock,
+        variants: [variant({ stock, available: stock - 2 })],
+      }
       return json(200, stored.variants[0])
     },
     ...api,
@@ -58,7 +64,22 @@ describe('ProductsPage', () => {
     expect(within(table).getAllByText('Sotuvda').length).toBeGreaterThan(0)
     expect(within(table).getAllByText('Qoralama').length).toBeGreaterThan(0)
     expect(await within(table).findByText('10 dona')).toBeInTheDocument()
+    expect(within(table).getByText('/ 2 band', { exact: false })).toBeInTheDocument()
     expect(screen.getByText('2 ta mahsulot')).toBeInTheDocument()
+  })
+
+  it('takes stock totals from the list and fetches a detail only for an expanded row', async () => {
+    const u = userEvent.setup()
+    const { callsTo } = setup()
+    const table = await screen.findByRole('table', { name: "Mahsulotlar ro'yxati" })
+    expect(await within(table).findByText('10 dona')).toBeInTheDocument()
+    expect(within(table).getByText('0 dona')).toBeInTheDocument()
+    expect(callsTo('GET', '/api/catalog/seller/products/p1/')).toHaveLength(0)
+    expect(callsTo('GET', '/api/catalog/seller/products/p2/')).toHaveLength(0)
+
+    await openVariants(u)
+    expect(callsTo('GET', '/api/catalog/seller/products/p1/')).toHaveLength(1)
+    expect(callsTo('GET', '/api/catalog/seller/products/p2/')).toHaveLength(0)
   })
 
   it('filters by status tab and debounces the search', async () => {
@@ -113,6 +134,9 @@ describe('ProductsPage', () => {
     await u.type(input, '25{Enter}')
     expect(await screen.findByText('Qoldiq saqlandi: Qizil')).toBeInTheDocument()
     expect(input).toHaveValue('25')
+    // The list is refetched and shows the new total.
+    const table = screen.getByRole('table', { name: "Mahsulotlar ro'yxati" })
+    expect(await within(table).findByText('25 dona')).toBeInTheDocument()
     const [, init] = callsTo('PATCH', '/api/catalog/seller/variants/v1/stock/')[0]!
     expect(JSON.parse(String(init!.body))).toEqual({ stock: 25 })
   })
@@ -145,9 +169,9 @@ describe('ProductsPage', () => {
     await u.type(input, '3')
     await u.click(screen.getByRole('button', { name: 'Qoldiqni saqlash: Qizil' }))
 
-    // Optimistic: the product total already shows the new stock.
+    // Optimistic: the field keeps the new value while the request runs.
+    expect(input).toHaveValue('3')
     const table = screen.getByRole('table', { name: "Mahsulotlar ro'yxati" })
-    expect(await within(table).findByText('3 dona')).toBeInTheDocument()
 
     await act(async () => release())
     expect(await screen.findByText(/5 dona band qilingan/)).toBeInTheDocument()

@@ -111,6 +111,7 @@ export type SellerCatalogErrorCode =
   | 'STOCK_BELOW_RESERVED'
   | 'INVALID_IMAGE_KEY'
   | 'IMAGE_EXISTS'
+  | 'LAST_ACTIVE_VARIANT'
   | 'VALIDATION_ERROR'
 
 /* -------------------------------------------------------------------- cart */

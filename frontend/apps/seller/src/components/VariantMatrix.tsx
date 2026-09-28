@@ -225,24 +225,36 @@ function MatrixRow({
       : null
 
   if (row.removed) {
+    // Switching a saved variant off can fail too (e.g. the last active one of a product on sale).
+    const removeError = message(errors?.row)
     return (
       <li
         data-row={row.key}
-        className="flex items-center justify-between gap-3 rounded-xl border border-dashed border-border px-3 py-2 text-sm text-text-muted"
+        className={cn(
+          'flex flex-col gap-1.5 rounded-xl border border-dashed px-3 py-2 text-sm text-text-muted',
+          removeError ? 'border-danger' : 'border-border',
+        )}
       >
-        <span className="min-w-0 truncate line-through">{name}</span>
-        <span className="flex shrink-0 items-center gap-2">
-          <Badge tone="muted">{row.variantId ? t('matrix.inactive') : t('matrix.skipped')}</Badge>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => onChange({ removed: false })}
-            aria-label={t('matrix.restore', { name })}
-            leadingIcon={<RotateCcw aria-hidden="true" size={16} strokeWidth={1.75} />}
-          >
-            <span className="hidden sm:inline">{t('matrix.restoreShort')}</span>
-          </Button>
-        </span>
+        <div className="flex items-center justify-between gap-3">
+          <span className="min-w-0 truncate line-through">{name}</span>
+          <span className="flex shrink-0 items-center gap-2">
+            <Badge tone="muted">{row.variantId ? t('matrix.inactive') : t('matrix.skipped')}</Badge>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => onChange({ removed: false })}
+              aria-label={t('matrix.restore', { name })}
+              leadingIcon={<RotateCcw aria-hidden="true" size={16} strokeWidth={1.75} />}
+            >
+              <span className="hidden sm:inline">{t('matrix.restoreShort')}</span>
+            </Button>
+          </span>
+        </div>
+        {removeError && (
+          <p role="alert" className="text-danger-ink">
+            {removeError}
+          </p>
+        )}
       </li>
     )
   }

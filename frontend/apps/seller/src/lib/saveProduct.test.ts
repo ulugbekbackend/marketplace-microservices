@@ -4,7 +4,7 @@ import {
   type SellerProductDetail,
 } from '@bozorcha/api-client'
 import { describe, expect, it, vi } from 'vitest'
-import { saveProduct } from './saveProduct'
+import { productSaveError, saveProduct, variantFailure } from './saveProduct'
 import type { VariantRow } from './variantMatrix'
 
 type SellerApi = ReturnType<typeof sellerCatalogEndpoints>
@@ -19,6 +19,8 @@ const product = (patch: Partial<SellerProductDetail> = {}): SellerProductDetail 
   max_price_tiyin: null,
   in_stock: false,
   variants_count: 0,
+  stock_total: 0,
+  reserved_total: 0,
   image_url: null,
   created_at: '2026-09-01T00:00:00Z',
   updated_at: '2026-09-01T00:00:00Z',
@@ -80,7 +82,7 @@ const asApi = (mocks: ReturnType<typeof fakeApi>) => mocks as unknown as SellerA
 const values = { title: ' Choynak ', category_id: 'c1', description: '', status: 'active' as const }
 
 describe('saveProduct', () => {
-  it('creates the product, then its variants with integer tiyin prices', async () => {
+  it('creates the product as a draft, then its variants, then puts it on sale', async () => {
     const api = fakeApi()
     const result = await saveProduct(asApi(api), {
       productId: null,
@@ -95,9 +97,14 @@ describe('saveProduct', () => {
       title: 'Choynak',
       description: '',
       category_id: 'c1',
-      status: 'active',
+      status: 'draft',
     })
     expect(api.createVariant).toHaveBeenCalledTimes(1)
+    expect(api.updateProduct).toHaveBeenCalledExactlyOnceWith('p1', { status: 'active' })
+    expect(api.updateProduct.mock.invocationCallOrder[0]).toBeGreaterThan(
+      api.createVariant.mock.invocationCallOrder[0]!,
+    )
+    expect(result.activation).toBeNull()
     expect(api.createVariant).toHaveBeenCalledWith('p1', {
       sku: 'CH-RED',
       price_tiyin: 12_500_050,
@@ -137,7 +144,14 @@ describe('saveProduct', () => {
         }),
       ],
     })
-    expect(api.updateProduct).toHaveBeenCalledWith('p1', { status: 'active' })
+    // Going on sale is sent last, after every variant change.
+    expect(api.updateProduct).toHaveBeenCalledExactlyOnceWith('p1', { status: 'active' })
+    expect(api.updateProduct.mock.invocationCallOrder[0]).toBeGreaterThan(
+      Math.max(
+        ...api.updateVariant.mock.invocationCallOrder,
+        ...api.setStock.mock.invocationCallOrder,
+      ),
+    )
     expect(api.updateVariant.mock.calls).toEqual([
       ['v2', { price_tiyin: 200 }],
       ['v4', { is_active: false }],
@@ -186,5 +200,105 @@ describe('saveProduct', () => {
       saveProduct(asApi(api), { productId: null, values, baseline: null, rows: [row({})] }),
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' })
     expect(api.createVariant).not.toHaveBeenCalled()
+  })
+
+  it('takes a product off sale before touching the variants', async () => {
+    const api = fakeApi()
+    const original = { sku: 'OLD', priceTiyin: 100, stock: 5, active: true }
+    await saveProduct(asApi(api), {
+      productId: 'p1',
+      values: { ...values, title: 'Choynak', status: 'draft' },
+      baseline: product({ status: 'active' }),
+      rows: [row({ key: 'off', variantId: 'v1', sku: 'OLD', price: '1', removed: true, original })],
+    })
+    expect(api.updateProduct).toHaveBeenCalledExactlyOnceWith('p1', { status: 'draft' })
+    expect(api.updateProduct.mock.invocationCallOrder[0]).toBeLessThan(
+      api.updateVariant.mock.invocationCallOrder[0]!,
+    )
+  })
+
+  it('sends other product changes first and the activation last', async () => {
+    const api = fakeApi()
+    const original = { sku: 'OLD', priceTiyin: 100, stock: 5, active: true }
+    await saveProduct(asApi(api), {
+      productId: 'p1',
+      values: { ...values, title: 'Yangi choynak' },
+      baseline: product(),
+      rows: [row({ key: 'a', variantId: 'v1', sku: 'OLD', price: '1', stock: '5', original })],
+    })
+    expect(api.updateProduct.mock.calls).toEqual([
+      ['p1', { title: 'Yangi choynak' }],
+      ['p1', { status: 'active' }],
+    ])
+  })
+
+  it('keeps a new product as a draft when no variant got saved', async () => {
+    const api = fakeApi({
+      createVariant: vi.fn(async () => {
+        throw new ApiError(409, 'SKU_TAKEN', 'taken')
+      }),
+      product: vi.fn(async () => product()),
+    })
+    const result = await saveProduct(asApi(api), {
+      productId: null,
+      values,
+      baseline: null,
+      rows: [row({ key: 'a', sku: 'TAKEN' })],
+    })
+    expect(api.updateProduct).not.toHaveBeenCalled()
+    expect(result.activation).toEqual({ key: 'activateNoVariant' })
+    expect(result.product.status).toBe('draft')
+    expect(result.failures.a).toEqual({ sku: { key: 'skuTaken' } })
+  })
+
+  it('keeps what was saved when the activation is refused, with the server reason', async () => {
+    const reason = 'A product needs at least one active variant before it can be active.'
+    const api = fakeApi({
+      updateProduct: vi.fn(async () => {
+        throw new ApiError(400, 'VALIDATION_ERROR', 'bad', { status: [reason] })
+      }),
+      product: vi.fn(async () => product()),
+    })
+    const result = await saveProduct(asApi(api), {
+      productId: null,
+      values,
+      baseline: null,
+      rows: [row({ key: 'a', sku: 'CH-1' })],
+    })
+    expect(result.activation).toEqual({ key: 'activateRejected', params: { message: reason } })
+    expect(result.rows[0]!.variantId).toBe('v-CH-1')
+    expect(result.product.id).toBe('p1')
+  })
+
+  it('reports a failed activation without a reason as a plain message', async () => {
+    const api = fakeApi({
+      updateProduct: vi.fn(async () => {
+        throw new ApiError(503, 'SERVICE_UNAVAILABLE', 'down')
+      }),
+    })
+    const result = await saveProduct(asApi(api), {
+      productId: null,
+      values,
+      baseline: null,
+      rows: [row({ key: 'a', sku: 'CH-1' })],
+    })
+    expect(result.activation).toEqual({ key: 'activateFailed' })
+  })
+})
+
+describe('save errors', () => {
+  it('maps the last active variant rule to the row', () => {
+    const error = new ApiError(409, 'LAST_ACTIVE_VARIANT', 'x', { variant_id: 'v1' })
+    expect(variantFailure(error)).toEqual({ row: { key: 'lastActiveVariant' } })
+  })
+
+  it('shows the server status message of a 400', () => {
+    const reason = 'A product needs at least one active variant before it can be active.'
+    expect(
+      productSaveError(new ApiError(400, 'VALIDATION_ERROR', 'x', { status: [reason] })),
+    ).toEqual({ key: 'statusRejected', params: { message: reason } })
+    expect(
+      productSaveError(new ApiError(400, 'VALIDATION_ERROR', 'x', { title: ['required'] })),
+    ).toEqual({ key: 'rejected' })
   })
 })

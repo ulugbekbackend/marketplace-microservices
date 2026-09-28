@@ -1,7 +1,6 @@
 import {
   keepPreviousData,
   useMutation,
-  useQueries,
   useQuery,
   useQueryClient,
   type QueryClient,
@@ -91,24 +90,47 @@ export function useSellerProduct(productId: Uuid | undefined, options: { enabled
   })
 }
 
-/**
- * Details of several products at once (the list has no stock totals). Shares the cache with
- * useSellerProduct, so expanding a row afterwards is instant.
- */
-export function useSellerProductDetails(productIds: readonly Uuid[]) {
-  const { seller } = useApi()
-  return useQueries({
-    queries: productIds.map((id) => ({
-      queryKey: queryKeys.sellerProduct(id),
-      queryFn: ({ signal }: { signal: AbortSignal }) => seller.product(id, signal),
-      staleTime: 30_000,
-    })),
-  })
-}
-
 /** Lists show prices and stock flags derived from variants: refresh them after any change. */
 export function invalidateSellerLists(queryClient: QueryClient) {
   return queryClient.invalidateQueries({ queryKey: [...queryKeys.sellerProducts, 'list'] })
+}
+
+export type ImageDeleteVars = { productId: Uuid; imageId: Uuid }
+
+type ImageDeleteContext = { previous: SellerProductDetail | undefined }
+
+/**
+ * Deletes a product image. The tile disappears at once (optimistic); it comes back if the
+ * server refuses. Afterwards the product (positions are renumbered) and the lists (the cover
+ * image may change) are refetched.
+ */
+export function useDeleteProductImage() {
+  const { seller } = useApi()
+  const queryClient = useQueryClient()
+  return useMutation<void, ApiError, ImageDeleteVars, ImageDeleteContext>({
+    mutationFn: ({ productId, imageId }) => seller.deleteImage(productId, imageId),
+    onMutate: async ({ productId, imageId }) => {
+      const key = queryKeys.sellerProduct(productId)
+      await queryClient.cancelQueries({ queryKey: key })
+      const previous = queryClient.getQueryData<SellerProductDetail>(key)
+      if (previous) {
+        queryClient.setQueryData<SellerProductDetail>(key, {
+          ...previous,
+          images: previous.images.filter((image) => image.id !== imageId),
+        })
+      }
+      return { previous }
+    },
+    onError: (_error, { productId }, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(queryKeys.sellerProduct(productId), context.previous)
+      }
+    },
+    onSettled: (_data, _error, { productId }) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.sellerProduct(productId) })
+      void invalidateSellerLists(queryClient)
+    },
+  })
 }
 
 export type StockUpdateVars = { productId: Uuid; variantId: Uuid; stock: number }

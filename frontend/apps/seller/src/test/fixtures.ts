@@ -88,6 +88,8 @@ export const productDetail = (patch: Partial<SellerProductDetail> = {}): SellerP
   max_price_tiyin: 45_000_000,
   in_stock: true,
   variants_count: 1,
+  stock_total: 10,
+  reserved_total: 2,
   image_url: null,
   created_at: '2026-09-01T00:00:00Z',
   updated_at: '2026-09-01T00:00:00Z',

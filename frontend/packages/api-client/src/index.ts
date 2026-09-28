@@ -68,12 +68,13 @@ export {
   IMAGE_POLL_INTERVAL_MS,
   invalidateSellerLists,
   useApplySeller,
+  useDeleteProductImage,
   useAttributes,
   useSellerApplication,
   useSellerProduct,
-  useSellerProductDetails,
   useSellerProducts,
   useUpdateVariantStock,
+  type ImageDeleteVars,
   type StockUpdateVars,
 } from './hooks/seller'
 export {

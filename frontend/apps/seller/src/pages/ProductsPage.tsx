@@ -1,10 +1,4 @@
-import {
-  useSellerProductDetails,
-  useSellerProducts,
-  type ProductStatus,
-  type SellerProduct,
-  type SellerProductDetail,
-} from '@bozorcha/api-client'
+import { useSellerProducts, type ProductStatus, type SellerProduct } from '@bozorcha/api-client'
 import {
   Button,
   DataTable,
@@ -17,7 +11,7 @@ import {
   type DataTableColumn,
 } from '@bozorcha/ui'
 import { ImageOff, PackageOpen, Plus, Search, SearchX } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useSearchParams } from 'react-router'
 import { ProductStatusBadge } from '../components/ProductStatusBadge'
@@ -32,18 +26,6 @@ const FILTERS = ['all', 'draft', 'active', 'archived'] as const
 type Filter = (typeof FILTERS)[number]
 
 const isFilter = (value: string | null): value is Filter => FILTERS.includes(value as Filter)
-
-/** Totals across a product's variants; null while its details load. */
-function stockTotals(detail: SellerProductDetail | undefined) {
-  if (!detail) return null
-  return detail.variants.reduce(
-    (sum, variant) => ({
-      stock: sum.stock + (variant.stock ?? 0),
-      reserved: sum.reserved + (variant.reserved ?? 0),
-    }),
-    { stock: 0, reserved: 0 },
-  )
-}
 
 function priceRange(product: SellerProduct): string | null {
   const { min_price_tiyin: min, max_price_tiyin: max } = product
@@ -85,9 +67,6 @@ export function ProductsPage() {
     page_size: PAGE_SIZE,
   })
   const items = products.data?.items
-  const ids = useMemo(() => items?.map((item) => item.id) ?? [], [items])
-  const details = useSellerProductDetails(ids)
-  const detailById = new Map(ids.map((id, index) => [id, details[index]?.data]))
 
   const setFilter = (value: string) => {
     setParams((current) => {
@@ -184,19 +163,16 @@ export function ProductsPage() {
       header: t('products.stockReserved'),
       align: 'end',
       className: 'hidden lg:table-cell tabular whitespace-nowrap',
-      cell: (product) => {
-        const totals = stockTotals(detailById.get(product.id))
-        if (!totals) return <Skeleton className="ml-auto h-4 w-16" />
-        return (
-          <span>
-            {t('products.units', { count: totals.stock })}
-            <span className="text-text-muted">
-              {' '}
-              / {t('products.reservedUnits', { count: totals.reserved })}
-            </span>
+      // Totals over active variants, straight from the list: no request per row.
+      cell: (product) => (
+        <span>
+          {t('products.units', { count: product.stock_total })}
+          <span className="text-text-muted">
+            {' '}
+            / {t('products.reservedUnits', { count: product.reserved_total })}
           </span>
-        )
-      },
+        </span>
+      ),
     },
   ]
 

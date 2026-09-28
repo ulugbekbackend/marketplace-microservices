@@ -12,7 +12,7 @@ import type { UploadItem } from '@bozorcha/ui'
 import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-export type UploadErrorKey = 'network' | 'rejected' | 'storage' | 'unknown'
+export type UploadErrorKey = 'network' | 'rejected' | 'storage' | 'unknown' | 'processingFailed'
 
 type LocalUpload = {
   id: string
@@ -140,10 +140,21 @@ export function useImageUploads(productId: string | null) {
     setUploads((list) => list.filter((upload) => !ids.has(upload.id)))
   }, [])
 
-  return { uploads, add, retry, settle }
+  /** Drops a local upload that failed (it never reached the product). */
+  const discard = useCallback((id: string) => {
+    const upload = uploadsRef.current.find((item) => item.id === id)
+    if (!upload || upload.status !== 'failed') return
+    revokePreview(upload.previewUrl)
+    setUploads((list) => list.filter((item) => item.id !== id))
+  }, [])
+
+  return { uploads, add, retry, settle, discard }
 }
 
-/** Server images first (by position), then files still uploading or failed. */
+/**
+ * Server images first (by position), then files still uploading or failed. Every server image
+ * can be deleted; a local upload only once it failed.
+ */
 export function mergeUploadItems(
   images: readonly SellerImage[],
   uploads: readonly LocalUpload[],
@@ -164,7 +175,8 @@ export function mergeUploadItems(
           ? (image.thumb_url ?? image.medium_url)
           : (previewByImage.get(image.id) ?? null),
       status,
-      ...(status === 'failed' ? { error: labels.error('rejected'), retryable: false } : {}),
+      removable: true,
+      ...(status === 'failed' ? { error: labels.error('processingFailed'), retryable: false } : {}),
     }
   })
   for (const upload of uploads) {
@@ -175,6 +187,7 @@ export function mergeUploadItems(
       previewUrl: upload.previewUrl || null,
       status: upload.status === 'attached' ? 'processing' : upload.status,
       progress: upload.progress,
+      removable: upload.status === 'failed',
       ...(upload.error ? { error: labels.error(upload.error) } : {}),
     })
   }
