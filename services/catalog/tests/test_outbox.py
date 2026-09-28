@@ -37,16 +37,16 @@ def only_event() -> EventEnvelope:
     return to_envelope(row)
 
 
-def test_create_active_product_writes_product_updated(
+def test_activating_a_product_writes_product_updated(
     seller: Seller, categories: dict[str, Category]
 ) -> None:
     product = services.create_product(
-        seller,
-        title="Galaxy S25",
-        category=categories["smartphones"],
-        description="Flagship",
-        status=ProductStatus.ACTIVE.value,
+        seller, title="Galaxy S25", category=categories["smartphones"], description="Flagship"
     )
+    make_variant(product=product, price_tiyin=500, stock=0)
+    Outbox.objects.all().delete()
+
+    services.update_product(seller, product.id, status=ProductStatus.ACTIVE.value)
 
     event = only_event()
     assert event.event_type is EventType.PRODUCT_UPDATED
@@ -65,7 +65,7 @@ def test_create_active_product_writes_product_updated(
         categories["phones"].id,
         categories["smartphones"].id,
     ]
-    assert (document.min_price_tiyin, document.max_price_tiyin) == (0, 0)
+    assert (document.min_price_tiyin, document.max_price_tiyin) == (500, 500)
     assert document.in_stock is False
     assert document.rating == 0
     assert document.image_url is None
@@ -185,12 +185,7 @@ def test_rolled_back_change_leaves_no_outbox_row(
         pass
 
     with pytest.raises(Boom), transaction.atomic():
-        services.create_product(
-            seller,
-            title="Never",
-            category=categories["phones"],
-            status=ProductStatus.ACTIVE.value,
-        )
+        services.create_product(seller, title="Never", category=categories["phones"])
         raise Boom
 
     assert Outbox.objects.count() == 0

@@ -10,7 +10,12 @@ from django.conf import settings
 from products import storage
 from products.images import InvalidImageError, render_webp
 from products.models import ImageStatus, ProductImage
-from products.services import RenditionKeys, complete_image, fail_image
+from products.services import (
+    RenditionKeys,
+    complete_image,
+    discard_orphan_renditions,
+    fail_image,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -62,10 +67,13 @@ def process_product_image(self: Task, image_id: str) -> str:
     except BotoCoreError as exc:
         return _retry_or_fail(self, image_uuid, exc)
 
-    complete_image(
+    completed = complete_image(
         image_uuid,
         RenditionKeys(thumb=keys["thumb"], medium=keys["medium"], large=keys["large"]),
     )
+    if not completed:
+        # The seller may have deleted the image meanwhile: do not leave its files behind.
+        discard_orphan_renditions(image_uuid, list(keys.values()))
     return ImageStatus.READY.value
 
 

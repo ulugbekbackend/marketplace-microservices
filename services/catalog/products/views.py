@@ -209,7 +209,13 @@ class SellerVariantUpdateView(SellerMixin):
     @extend_schema(
         operation_id="seller_variants_update",
         request=VariantUpdateSerializer,
-        responses=SellerVariantSerializer,
+        responses={
+            200: SellerVariantSerializer,
+            409: OpenApiResponse(
+                description="SKU_TAKEN, or LAST_ACTIVE_VARIANT when deactivating the last "
+                "active variant of an active product."
+            ),
+        },
     )
     def patch(self, request: Request, variant_id: UUID) -> Response:
         data = VariantUpdateSerializer(data=request.data, partial=True)
@@ -271,3 +277,18 @@ class ProductImageCreateView(SellerMixin):
         data.is_valid(raise_exception=True)
         image = services.attach_image(self.seller, product_id, data.validated_data["key"])
         return Response(SellerImageSerializer(image).data, status=status.HTTP_202_ACCEPTED)
+
+
+@extend_schema(tags=[SELLER])
+class ProductImageDetailView(SellerMixin):
+    @extend_schema(
+        operation_id="seller_images_delete",
+        request=None,
+        responses={
+            204: OpenApiResponse(description="Deleted; the stored files are removed after it."),
+            404: OpenApiResponse(description="Not the seller's product or image."),
+        },
+    )
+    def delete(self, request: Request, product_id: UUID, image_id: UUID) -> Response:
+        services.delete_image(self.seller, product_id, image_id)
+        return Response(status=status.HTTP_204_NO_CONTENT)

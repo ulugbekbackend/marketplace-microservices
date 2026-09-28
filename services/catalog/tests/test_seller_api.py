@@ -36,6 +36,7 @@ SELLER_ENDPOINTS = [
     ("delete", f"{PRODUCTS}{uuid4()}/"),
     ("post", f"{PRODUCTS}{uuid4()}/variants/"),
     ("post", f"{PRODUCTS}{uuid4()}/images/"),
+    ("delete", f"{PRODUCTS}{uuid4()}/images/{uuid4()}/"),
     ("patch", f"/api/catalog/seller/variants/{uuid4()}/"),
     ("patch", f"/api/catalog/seller/variants/{uuid4()}/stock/"),
     ("post", "/api/catalog/seller/uploads/presign/"),
@@ -194,6 +195,7 @@ def test_update_product(
     seller_api: APIClient, seller: Seller, categories: dict[str, Category]
 ) -> None:
     product = make_product(seller=seller, status=ProductStatus.DRAFT.value, slug="old-slug")
+    make_variant(product=product)
 
     response = seller_api.patch(
         product_url(product.id),
@@ -390,7 +392,9 @@ def test_duplicate_sku_and_combination_conflict(
 
 
 def test_update_variant(seller_api: APIClient, seller: Seller) -> None:
-    variant = make_variant(product=make_product(seller=seller), sku="OLD", price_tiyin=10)
+    product = make_product(seller=seller)
+    variant = make_variant(product=product, sku="OLD", price_tiyin=10)
+    make_variant(product=product)  # the product stays sellable without the first one
 
     response = seller_api.patch(
         variant_url(variant.id),

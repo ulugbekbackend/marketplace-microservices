@@ -29,6 +29,11 @@ urlpatterns = [
         name="seller-image-create",
     ),
     path(
+        "seller/products/<uuid:product_id>/images/<uuid:image_id>/",
+        views.ProductImageDetailView.as_view(),
+        name="seller-image-detail",
+    ),
+    path(
         "seller/variants/<uuid:variant_id>/",
         views.SellerVariantUpdateView.as_view(),
         name="seller-variant-update",
