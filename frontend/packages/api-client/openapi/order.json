@@ -402,6 +402,324 @@
           }
         }
       }
+    },
+    "/api/orders/seller/": {
+      "get": {
+        "operationId": "seller_orders_list",
+        "summary": "Sub-orders of the current seller, newest first",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "date_from",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "First day, inclusive (Asia/Tashkent)."
+          },
+          {
+            "in": "query",
+            "name": "date_to",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Last day, inclusive (Asia/Tashkent)."
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "A page number within the paginated result set.",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "page_size",
+            "required": false,
+            "in": "query",
+            "description": "Number of results to return per page.",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["ACCEPTED", "CANCELLED_BY_SELLER", "DELIVERED", "NEW", "SHIPPED"]
+              }
+            },
+            "description": "Repeat the parameter or pass a comma separated list."
+          }
+        ],
+        "tags": ["seller-orders"],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedSellerSubOrderList"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "VALIDATION_ERROR: unknown status or bad date"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "NOT_AUTHENTICATED"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED: seller role required"
+          }
+        }
+      }
+    },
+    "/api/orders/seller/{sub_order_id}/": {
+      "get": {
+        "operationId": "seller_orders_retrieve",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sub_order_id",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true
+          }
+        ],
+        "tags": ["seller-orders"],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SellerSubOrderDetail"
+                }
+              }
+            },
+            "description": ""
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "NOT_AUTHENTICATED"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED: seller role required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "NOT_FOUND: no such sub-order of this seller"
+          }
+        }
+      }
+    },
+    "/api/orders/seller/{sub_order_id}/status/": {
+      "patch": {
+        "operationId": "seller_orders_set_status",
+        "description": "Allowed: NEW -> ACCEPTED | CANCELLED_BY_SELLER, ACCEPTED -> SHIPPED | CANCELLED_BY_SELLER, SHIPPED -> DELIVERED. SHIPPED needs tracking_number, CANCELLED_BY_SELLER needs reason. The order moves to FULFILLING with the first shipment and to COMPLETED once every sub-order that was not cancelled is delivered.",
+        "summary": "Accept, ship, deliver or cancel a sub-order",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sub_order_id",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true
+          }
+        ],
+        "tags": ["seller-orders"],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchedSubOrderStatusChangeRequest"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchedSubOrderStatusChangeRequest"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchedSubOrderStatusChangeRequest"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SellerSubOrderDetail"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "VALIDATION_ERROR: unknown status, missing tracking_number or reason"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "NOT_AUTHENTICATED"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED: seller role required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "NOT_FOUND: no such sub-order of this seller"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "INVALID_TRANSITION with details {from, to}; ORDER_NOT_ACTIVE with details {order_status}"
+          }
+        }
+      }
+    },
+    "/api/orders/seller/stats/": {
+      "get": {
+        "operationId": "seller_orders_stats",
+        "description": "Days, ISO weeks and calendar months in Asia/Tashkent. Sub-orders cancelled by the seller are left out of orders/gross/net but counted in by_status. net = gross - commission. daily covers the last 30 days including today.",
+        "summary": "Dashboard numbers of the current seller",
+        "tags": ["seller-orders"],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SellerStats"
+                }
+              }
+            },
+            "description": ""
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "NOT_AUTHENTICATED"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "PERMISSION_DENIED: seller role required"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -496,6 +814,25 @@
           }
         },
         "required": ["order_id", "status"]
+      },
+      "DailyStats": {
+        "type": "object",
+        "properties": {
+          "orders": {
+            "type": "integer"
+          },
+          "gross_tiyin": {
+            "type": "integer"
+          },
+          "net_tiyin": {
+            "type": "integer"
+          },
+          "date": {
+            "type": "string",
+            "format": "date"
+          }
+        },
+        "required": ["date", "gross_tiyin", "net_tiyin", "orders"]
       },
       "Error": {
         "type": "object",
@@ -763,9 +1100,62 @@
           }
         }
       },
+      "PaginatedSellerSubOrderList": {
+        "type": "object",
+        "required": ["items", "total", "page", "page_size"],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SellerSubOrder"
+            }
+          },
+          "total": {
+            "type": "integer"
+          },
+          "page": {
+            "type": "integer"
+          },
+          "page_size": {
+            "type": "integer"
+          }
+        }
+      },
+      "PatchedSubOrderStatusChangeRequest": {
+        "type": "object",
+        "description": "SHIPPED needs a tracking number, CANCELLED_BY_SELLER a reason.",
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/SubOrderTargetStatusEnum"
+          },
+          "tracking_number": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 255
+          }
+        }
+      },
+      "PeriodStats": {
+        "type": "object",
+        "properties": {
+          "orders": {
+            "type": "integer"
+          },
+          "gross_tiyin": {
+            "type": "integer"
+          },
+          "net_tiyin": {
+            "type": "integer"
+          }
+        },
+        "required": ["gross_tiyin", "net_tiyin", "orders"]
+      },
       "SellerGroup": {
         "type": "object",
-        "description": "The items of one seller. ``sub_order_id``/``status`` stay null until payment.",
+        "description": "The items of one seller. Sub-order fields stay null (history empty) until payment.",
         "properties": {
           "seller_id": {
             "type": "string",
@@ -790,6 +1180,14 @@
               }
             ]
           },
+          "tracking_number": {
+            "type": "string",
+            "nullable": true
+          },
+          "cancel_reason": {
+            "type": "string",
+            "nullable": true
+          },
           "subtotal_tiyin": {
             "type": "integer"
           },
@@ -798,14 +1196,326 @@
             "items": {
               "$ref": "#/components/schemas/OrderItem"
             }
+          },
+          "history": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SubOrderHistory"
+            }
           }
         },
-        "required": ["items", "seller_id", "shop_name", "status", "sub_order_id", "subtotal_tiyin"]
+        "required": [
+          "cancel_reason",
+          "history",
+          "items",
+          "seller_id",
+          "shop_name",
+          "status",
+          "sub_order_id",
+          "subtotal_tiyin",
+          "tracking_number"
+        ]
+      },
+      "SellerItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "readOnly": true
+          },
+          "variant_id": {
+            "type": "string",
+            "format": "uuid",
+            "readOnly": true
+          },
+          "title": {
+            "type": "string"
+          },
+          "sku": {
+            "type": "string"
+          },
+          "image": {
+            "type": "string",
+            "nullable": true,
+            "readOnly": true
+          },
+          "price_tiyin": {
+            "type": "integer"
+          },
+          "qty": {
+            "type": "integer",
+            "readOnly": true
+          },
+          "line_total_tiyin": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "image",
+          "line_total_tiyin",
+          "price_tiyin",
+          "qty",
+          "sku",
+          "title",
+          "variant_id"
+        ]
+      },
+      "SellerStats": {
+        "type": "object",
+        "description": "Tashkent today / ISO week / calendar month, the last 30 days and per-status counts.",
+        "properties": {
+          "today": {
+            "$ref": "#/components/schemas/PeriodStats"
+          },
+          "week": {
+            "$ref": "#/components/schemas/PeriodStats"
+          },
+          "month": {
+            "$ref": "#/components/schemas/PeriodStats"
+          },
+          "daily": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DailyStats"
+            }
+          },
+          "by_status": {
+            "$ref": "#/components/schemas/StatusCounts"
+          }
+        },
+        "required": ["by_status", "daily", "month", "today", "week"]
+      },
+      "SellerSubOrder": {
+        "type": "object",
+        "description": "A row of the seller list. Needs ``items_count`` annotated and ``order`` joined.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "readOnly": true
+          },
+          "order_id": {
+            "type": "string",
+            "format": "uuid",
+            "readOnly": true
+          },
+          "status": {
+            "$ref": "#/components/schemas/SubOrderStatusEnum"
+          },
+          "subtotal_tiyin": {
+            "type": "integer",
+            "readOnly": true
+          },
+          "commission_tiyin": {
+            "type": "integer",
+            "readOnly": true
+          },
+          "net_tiyin": {
+            "type": "integer",
+            "readOnly": true
+          },
+          "items_count": {
+            "type": "integer",
+            "readOnly": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          },
+          "customer_name": {
+            "type": "string",
+            "readOnly": true
+          },
+          "city": {
+            "type": "string",
+            "readOnly": true
+          }
+        },
+        "required": [
+          "city",
+          "commission_tiyin",
+          "created_at",
+          "customer_name",
+          "id",
+          "items_count",
+          "net_tiyin",
+          "order_id",
+          "status",
+          "subtotal_tiyin",
+          "updated_at"
+        ]
+      },
+      "SellerSubOrderDetail": {
+        "type": "object",
+        "description": "One sub-order with everything needed to ship it, including the customer's phone.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "readOnly": true
+          },
+          "order_id": {
+            "type": "string",
+            "format": "uuid",
+            "readOnly": true
+          },
+          "status": {
+            "$ref": "#/components/schemas/SubOrderStatusEnum"
+          },
+          "subtotal_tiyin": {
+            "type": "integer",
+            "readOnly": true
+          },
+          "commission_tiyin": {
+            "type": "integer",
+            "readOnly": true
+          },
+          "net_tiyin": {
+            "type": "integer",
+            "readOnly": true
+          },
+          "items_count": {
+            "type": "integer",
+            "readOnly": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          },
+          "customer_name": {
+            "type": "string",
+            "readOnly": true
+          },
+          "city": {
+            "type": "string",
+            "readOnly": true
+          },
+          "commission_rate": {
+            "type": "string",
+            "format": "decimal",
+            "pattern": "^-?\\d{0,1}(?:\\.\\d{0,4})?$"
+          },
+          "tracking_number": {
+            "type": "string",
+            "readOnly": true
+          },
+          "cancel_reason": {
+            "type": "string",
+            "readOnly": true
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SellerItem"
+            }
+          },
+          "delivery_address": {
+            "$ref": "#/components/schemas/Address"
+          },
+          "order_status": {
+            "$ref": "#/components/schemas/OrderStatusEnum"
+          },
+          "history": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SubOrderHistory"
+            }
+          }
+        },
+        "required": [
+          "cancel_reason",
+          "city",
+          "commission_rate",
+          "commission_tiyin",
+          "created_at",
+          "customer_name",
+          "delivery_address",
+          "history",
+          "id",
+          "items",
+          "items_count",
+          "net_tiyin",
+          "order_id",
+          "order_status",
+          "status",
+          "subtotal_tiyin",
+          "tracking_number",
+          "updated_at"
+        ]
+      },
+      "StatusCounts": {
+        "type": "object",
+        "properties": {
+          "NEW": {
+            "type": "integer"
+          },
+          "ACCEPTED": {
+            "type": "integer"
+          },
+          "SHIPPED": {
+            "type": "integer"
+          },
+          "DELIVERED": {
+            "type": "integer"
+          },
+          "CANCELLED_BY_SELLER": {
+            "type": "integer"
+          }
+        },
+        "required": ["ACCEPTED", "CANCELLED_BY_SELLER", "DELIVERED", "NEW", "SHIPPED"]
+      },
+      "SubOrderHistory": {
+        "type": "object",
+        "properties": {
+          "from_status": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SubOrderStatusEnum"
+              },
+              {
+                "$ref": "#/components/schemas/NullEnum"
+              }
+            ]
+          },
+          "to_status": {
+            "$ref": "#/components/schemas/SubOrderStatusEnum"
+          },
+          "reason": {
+            "type": "string",
+            "readOnly": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          }
+        },
+        "required": ["created_at", "from_status", "reason", "to_status"]
       },
       "SubOrderStatusEnum": {
         "enum": ["NEW", "ACCEPTED", "SHIPPED", "DELIVERED", "CANCELLED_BY_SELLER"],
         "type": "string",
         "description": "* `NEW` - New\n* `ACCEPTED` - Accepted\n* `SHIPPED` - Shipped\n* `DELIVERED` - Delivered\n* `CANCELLED_BY_SELLER` - Cancelled_By_Seller"
+      },
+      "SubOrderTargetStatusEnum": {
+        "enum": ["ACCEPTED", "SHIPPED", "DELIVERED", "CANCELLED_BY_SELLER"],
+        "type": "string",
+        "description": "* `ACCEPTED` - Accepted\n* `SHIPPED` - Shipped\n* `DELIVERED` - Delivered\n* `CANCELLED_BY_SELLER` - Cancelled_By_Seller"
       }
     },
     "securitySchemes": {
