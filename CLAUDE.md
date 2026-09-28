@@ -4,7 +4,7 @@ Multi-vendor marketplace, microservices in a monorepo (portfolio project).
 The full specification, the task list and the progress journal are kept locally, outside
 version control.
 
-**Current phase:** P2 done (tag `phase-2`): cart, stock reservation, orders with mock payment, shop checkout. Next is P3 — seller panel and sub-orders.
+**Current phase:** P3 done (tag `phase-3`): seller panel (onboarding, products with variant matrix and image upload, dashboard, order fulfilment) and sub-order statuses. Next is P4 — RabbitMQ saga and search.
 
 ## Commands
 Toolchain is project-local (no global installs): `source .tools/env.sh` (bash) or `. .\.tools\env.ps1` first.
