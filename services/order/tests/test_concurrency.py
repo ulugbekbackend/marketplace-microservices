@@ -10,12 +10,12 @@ import pytest
 from django.db import connection, connections, transaction
 from django.utils import timezone
 
-from contracts.enums import EventType, OrderStatus
+from contracts.enums import EventType, OrderStatus, SubOrderStatus, UserRole
 from messaging.models import Outbox
 from orders import services
-from orders.models import Order, SubOrder
-from tests.conftest import FakeUpstream
-from tests.factories import make_order
+from orders.models import Order, SubOrder, SubOrderStatusHistory
+from tests.conftest import FakeUpstream, user_client
+from tests.factories import make_order, make_paid_order, make_sub_order
 
 pytestmark = pytest.mark.django_db(transaction=True)
 
@@ -86,3 +86,63 @@ def test_expiry_skips_orders_locked_by_someone_else(upstream: FakeUpstream) -> N
     assert Order.objects.get(id=free.id).status == OrderStatus.EXPIRED.value
     assert Order.objects.get(id=locked.id).status == OrderStatus.RESERVED.value
     assert connection.vendor == "postgresql"
+
+
+def test_parallel_seller_changes_on_one_sub_order_let_exactly_one_win() -> None:
+    seller_id = uuid4()
+    sub_order = make_sub_order(seller_id, status=SubOrderStatus.ACCEPTED)
+    url = f"/api/orders/seller/{sub_order.id}/status/"
+    bodies = iter(
+        [
+            {"status": "SHIPPED", "tracking_number": "UZ-1"},
+            {"status": "CANCELLED_BY_SELLER", "reason": "Damaged"},
+        ]
+    )
+    lock = threading.Lock()
+    codes: list[int] = []
+
+    def change() -> None:
+        with lock:
+            body = next(bodies)
+        response = user_client(seller_id, UserRole.SELLER).patch(url, body, format="json")
+        with lock:
+            codes.append(response.status_code)
+
+    errors = run_in_threads(change, 2)
+
+    assert errors == []
+    assert sorted(codes) == [200, 409]
+    sub_order.refresh_from_db()
+    assert sub_order.status in {
+        SubOrderStatus.SHIPPED.value,
+        SubOrderStatus.CANCELLED_BY_SELLER.value,
+    }
+    assert SubOrderStatusHistory.objects.filter(sub_order=sub_order).count() == 2  # created + 1
+    assert Outbox.objects.filter(event_type=EventType.SUB_ORDER_STATUS_CHANGED.value).count() == 1
+    refunds = Outbox.objects.filter(event_type=EventType.ORDER_REFUND_REQUESTED.value).count()
+    assert refunds == (sub_order.status == SubOrderStatus.CANCELLED_BY_SELLER.value)
+
+
+def test_parallel_deliveries_of_the_last_sub_orders_complete_the_order_once() -> None:
+    sellers = [uuid4(), uuid4()]
+    order, subs = make_paid_order(
+        lines=[(seller, 1_000, 1) for seller in sellers], status=OrderStatus.FULFILLING
+    )
+    SubOrder.objects.filter(order=order).update(status=SubOrderStatus.SHIPPED.value)
+    targets = iter(subs.values())
+    lock = threading.Lock()
+
+    def deliver() -> None:
+        with lock:
+            sub_order = next(targets)
+        response = user_client(sub_order.seller_id, UserRole.SELLER).patch(
+            f"/api/orders/seller/{sub_order.id}/status/", {"status": "DELIVERED"}, format="json"
+        )
+        assert response.status_code == 200
+
+    errors = run_in_threads(deliver, 2)
+
+    assert errors == []
+    order.refresh_from_db()
+    assert order.status == OrderStatus.COMPLETED.value
+    assert order.history.filter(to_status=OrderStatus.COMPLETED.value).count() == 1

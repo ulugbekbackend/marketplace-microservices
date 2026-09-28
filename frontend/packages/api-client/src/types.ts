@@ -52,6 +52,13 @@ export type TokenRefreshResponse = AuthSchemas['TokenPair']
 export type LogoutRequest = AuthSchemas['RefreshRequest']
 export type UserUpdateRequest = AuthSchemas['PatchedUserUpdateRequest']
 
+export type SellerApplication = AuthSchemas['SellerApplication']
+export type SellerApplicationStatus = AuthSchemas['StatusEnum']
+export type SellerApplyRequest = AuthSchemas['SellerApplyRequest']
+
+/** Error codes of the seller application endpoints (not part of the OpenAPI schema). */
+export type SellerApplicationErrorCode = 'ALREADY_SELLER' | 'APPLICATION_PENDING' | 'NOT_FOUND'
+
 /** Error codes returned by the OTP endpoints (codes are not part of the OpenAPI schema). */
 export type AuthErrorCode =
   'OTP_INVALID' | 'OTP_EXPIRED' | 'OTP_BLOCKED' | 'OTP_RATE_LIMITED' | 'INVALID_PHONE'
@@ -72,6 +79,40 @@ export type ProductListParams = NonNullable<
 >
 
 export type Shop = CatalogSchemas['Shop']
+
+/* ---------------------------------------------------------- catalog: seller */
+
+export type ProductStatus = CatalogSchemas['ProductStatusEnum']
+export type SellerProduct = CatalogSchemas['SellerProduct']
+export type SellerProductDetail = CatalogSchemas['SellerProductDetail']
+export type SellerVariant = CatalogSchemas['SellerVariant']
+export type SellerImage = CatalogSchemas['SellerImage']
+export type ImageStatus = CatalogSchemas['ImageStatusEnum']
+export type ImageContentType = CatalogSchemas['ImageContentTypeEnum']
+export type Attribute = CatalogSchemas['Attribute']
+export type AttributeValue = CatalogSchemas['AttributeValue']
+export type SellerProductListParams = NonNullable<
+  CatalogOperations['seller_products_list']['parameters']['query']
+>
+export type ProductCreateRequest = CatalogSchemas['ProductCreateRequest']
+export type ProductUpdateRequest = CatalogSchemas['PatchedProductUpdateRequest']
+export type VariantCreateRequest = CatalogSchemas['VariantCreateRequest']
+export type VariantUpdateRequest = CatalogSchemas['PatchedVariantUpdateRequest']
+export type StockUpdateRequest = Required<CatalogSchemas['PatchedStockUpdateRequest']>
+export type PresignRequest = CatalogSchemas['PresignRequestRequest']
+export type PresignResponse = CatalogSchemas['PresignResponse']
+export type ImageAttachRequest = CatalogSchemas['ImageAttachRequest']
+
+/** Error codes of the seller catalog endpoints (not part of the OpenAPI schema). */
+export type SellerCatalogErrorCode =
+  | 'SELLER_NOT_FOUND'
+  | 'SKU_TAKEN'
+  | 'VARIANT_EXISTS'
+  | 'STOCK_BELOW_RESERVED'
+  | 'INVALID_IMAGE_KEY'
+  | 'IMAGE_EXISTS'
+  | 'LAST_ACTIVE_VARIANT'
+  | 'VALIDATION_ERROR'
 
 /* -------------------------------------------------------------------- cart */
 
@@ -134,3 +175,26 @@ export type UnavailableItem = {
   reason: 'not_found' | 'inactive' | 'out_of_stock'
   available: number
 }
+
+/* ----------------------------------------------------------- order: seller */
+
+export type SellerSubOrder = OrderSchemas['SellerSubOrder']
+export type SellerSubOrderDetail = OrderSchemas['SellerSubOrderDetail']
+export type SellerOrderItem = OrderSchemas['SellerItem']
+export type SubOrderHistoryEntry = OrderSchemas['SubOrderHistory']
+export type SubOrderTargetStatus = OrderSchemas['SubOrderTargetStatusEnum']
+export type SubOrderStatusChangeRequest = OrderSchemas['PatchedSubOrderStatusChangeRequest'] & {
+  status: SubOrderTargetStatus
+}
+export type SellerStats = OrderSchemas['SellerStats']
+export type SellerPeriodStats = OrderSchemas['PeriodStats']
+export type SellerDailyStats = OrderSchemas['DailyStats']
+export type SubOrderStatusCounts = OrderSchemas['StatusCounts']
+/** `status` is sent as one comma separated value (the server also accepts repeats). */
+export type SellerOrderListParams = NonNullable<
+  OrderOperations['seller_orders_list']['parameters']['query']
+>
+
+/** Error codes of the seller order endpoints (not part of the OpenAPI schema). */
+export type SellerOrderErrorCode =
+  'INVALID_TRANSITION' | 'ORDER_NOT_ACTIVE' | 'VALIDATION_ERROR' | 'NOT_FOUND'

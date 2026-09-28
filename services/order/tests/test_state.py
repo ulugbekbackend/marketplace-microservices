@@ -6,7 +6,7 @@ import pytest
 from django.db import transaction
 
 from contracts.enums import OrderStatus, SubOrderStatus
-from orders.models import OrderStatusHistory, SubOrder
+from orders.models import OrderStatusHistory, SubOrder, SubOrderStatusHistory
 from orders.state import (
     ORDER_TRANSITIONS,
     SUB_ORDER_TRANSITIONS,
@@ -14,6 +14,7 @@ from orders.state import (
     NotInTransaction,
     can_transition,
     lock_order,
+    lock_sub_order,
     transition,
     transition_sub_order,
 )
@@ -139,10 +140,16 @@ def test_sub_order_allowed_transitions(source: SubOrderStatus, target: SubOrderS
     )
 
     with transaction.atomic():
-        transition_sub_order(sub_order, target)
+        transition_sub_order(sub_order, target, reason="why", tracking_number="UZ-1")
 
     sub_order.refresh_from_db()
     assert sub_order.status == target.value
+    [row] = SubOrderStatusHistory.objects.filter(sub_order=sub_order)
+    assert (row.from_status, row.to_status, row.reason) == (source.value, target.value, "why")
+    shipped = target is SubOrderStatus.SHIPPED
+    cancelled = target is SubOrderStatus.CANCELLED_BY_SELLER
+    assert sub_order.tracking_number == ("UZ-1" if shipped else "")
+    assert sub_order.cancel_reason == ("why" if cancelled else "")
 
 
 @pytest.mark.parametrize(
@@ -161,3 +168,16 @@ def test_sub_order_disallowed_transitions(source: SubOrderStatus, target: SubOrd
 
     with pytest.raises(InvalidTransition), transaction.atomic():
         transition_sub_order(sub_order, target)
+    assert not SubOrderStatusHistory.objects.exists()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_sub_order_changes_need_a_transaction() -> None:
+    sub_order = SubOrder.objects.create(
+        order=make_order(status=S.PAID), seller_id=uuid4(), subtotal_tiyin=100
+    )
+
+    with pytest.raises(NotInTransaction):
+        transition_sub_order(sub_order, SubOrderStatus.ACCEPTED)
+    with pytest.raises(NotInTransaction):
+        lock_sub_order(sub_order.id)

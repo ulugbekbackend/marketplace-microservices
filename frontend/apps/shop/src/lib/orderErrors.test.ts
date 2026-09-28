@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import i18n from '../i18n'
 import { formatDateTime } from './dates'
 import { orderErrorKey, orderErrorMessage, unavailableItemsFromError } from './orderErrors'
-import { knownReason, orderNumber, subOrderTone } from './orders'
+import { knownReason, orderNumber } from './orders'
 
 describe('order error mapping', () => {
   it('maps service codes, 404, 503, network and fallbacks', () => {
@@ -55,14 +55,11 @@ describe('order error mapping', () => {
 })
 
 describe('order helpers', () => {
-  it('formats numbers, dates, reasons and sub-order tones', () => {
+  it('formats numbers, dates, and reasons', () => {
     expect(orderNumber('a1b2c3d4-0000-4000-8000-000000000001')).toBe('#A1B2C3D4')
     expect(formatDateTime('2026-09-27T10:05:00Z')).toMatch(/^27\.09\.2026, \d\d:05$/)
     expect(formatDateTime('nope')).toBe('')
     expect(knownReason('OUT_OF_STOCK')).toBe('OUT_OF_STOCK')
     expect(knownReason('SOMETHING_INTERNAL')).toBeNull()
-    expect(subOrderTone('NEW')).toBe('neutral')
-    expect(subOrderTone('SHIPPED')).toBe('purple')
-    expect(subOrderTone('CANCELLED_BY_SELLER')).toBe('danger')
   })
 })

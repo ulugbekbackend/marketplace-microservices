@@ -1,7 +1,8 @@
 """Order and sub-order state machines: an allowed-transitions table and one guarded setter.
 
-Callers lock the row first (``lock_order``) inside ``transaction.atomic``; ``transition``
-checks the table, saves the new status and records the change in the history table.
+Callers lock the rows first (``lock_order``, then ``lock_sub_order``) inside
+``transaction.atomic``; the transition functions check the table, save the new status and
+record the change in the history table.
 """
 
 from uuid import UUID
@@ -9,7 +10,7 @@ from uuid import UUID
 from django.db import transaction
 
 from contracts.enums import OrderStatus, SubOrderStatus
-from orders.models import Order, OrderStatusHistory, SubOrder
+from orders.models import Order, OrderStatusHistory, SubOrder, SubOrderStatusHistory
 from py_common.web.drf import ApiError
 
 ORDER_TRANSITIONS: dict[OrderStatus, frozenset[OrderStatus]] = {
@@ -90,14 +91,47 @@ def record_created(order: Order) -> None:
     OrderStatusHistory.objects.create(order=order, from_status=None, to_status=order.status)
 
 
-def transition_sub_order(sub_order: SubOrder, target: SubOrderStatus) -> SubOrder:
-    """Move a locked sub-order to ``target``. Seller endpoints use this in P3."""
+def record_sub_order_created(sub_order: SubOrder) -> None:
+    """The first history row of a new sub-order."""
+    SubOrderStatusHistory.objects.create(
+        sub_order=sub_order, from_status=None, to_status=sub_order.status
+    )
+
+
+def lock_sub_order(sub_order_id: UUID) -> SubOrder:
+    """SELECT ... FOR UPDATE on one sub-order. Lock its order first (``lock_order``)."""
+    _require_transaction()
+    return SubOrder.objects.select_for_update().get(id=sub_order_id)
+
+
+def transition_sub_order(
+    sub_order: SubOrder,
+    target: SubOrderStatus,
+    *,
+    reason: str = "",
+    tracking_number: str = "",
+) -> SubOrder:
+    """Move a locked sub-order to ``target`` and write a history row.
+
+    SHIPPED stores ``tracking_number``; CANCELLED_BY_SELLER stores ``reason`` as the
+    cancel reason. Every change keeps ``reason`` in the history row.
+    """
     _require_transaction()
     current = SubOrderStatus(sub_order.status)
     if not can_transition_sub_order(current, target):
         raise InvalidTransition(current.value, target.value)
     sub_order.status = target.value
-    sub_order.save(update_fields=["status"])
+    fields = ["status", "updated_at"]
+    if target is SubOrderStatus.SHIPPED:
+        sub_order.tracking_number = tracking_number
+        fields.append("tracking_number")
+    elif target is SubOrderStatus.CANCELLED_BY_SELLER:
+        sub_order.cancel_reason = reason
+        fields.append("cancel_reason")
+    sub_order.save(update_fields=fields)
+    SubOrderStatusHistory.objects.create(
+        sub_order=sub_order, from_status=current.value, to_status=target.value, reason=reason
+    )
     return sub_order
 
 

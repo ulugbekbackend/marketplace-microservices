@@ -1,6 +1,13 @@
 import { createContext, useContext, useMemo, useSyncExternalStore, type ReactNode } from 'react'
 import type { ApiClient } from '../client'
-import { authEndpoints, cartEndpoints, catalogEndpoints, orderEndpoints } from '../endpoints'
+import {
+  authEndpoints,
+  cartEndpoints,
+  catalogEndpoints,
+  orderEndpoints,
+  sellerCatalogEndpoints,
+  sellerOrderEndpoints,
+} from '../endpoints'
 
 type ApiContextValue = {
   client: ApiClient
@@ -8,6 +15,8 @@ type ApiContextValue = {
   catalog: ReturnType<typeof catalogEndpoints>
   cart: ReturnType<typeof cartEndpoints>
   orders: ReturnType<typeof orderEndpoints>
+  seller: ReturnType<typeof sellerCatalogEndpoints>
+  sellerOrders: ReturnType<typeof sellerOrderEndpoints>
 }
 
 const ApiContext = createContext<ApiContextValue | null>(null)
@@ -20,6 +29,8 @@ export function ApiProvider({ client, children }: { client: ApiClient; children:
       catalog: catalogEndpoints(client),
       cart: cartEndpoints(client),
       orders: orderEndpoints(client),
+      seller: sellerCatalogEndpoints(client),
+      sellerOrders: sellerOrderEndpoints(client),
     }),
     [client],
   )

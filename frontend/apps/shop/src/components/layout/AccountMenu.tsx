@@ -1,10 +1,9 @@
 import { useLogout, useMe, useSession } from '@bozorcha/api-client'
-import { Badge, cn, Skeleton, useToast } from '@bozorcha/ui'
+import { Badge, cn, formatE164, Skeleton, useToast } from '@bozorcha/ui'
 import { ClipboardList, LogOut, UserRound } from 'lucide-react'
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useLocation, useNavigate } from 'react-router'
-import { formatE164 } from '../../lib/phone'
 
 /** Login link for guests; for signed-in users a menu button with profile info and logout. */
 export function AccountMenu() {

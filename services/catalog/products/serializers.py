@@ -212,6 +212,12 @@ class SellerVariantSerializer(serializers.ModelSerializer[ProductVariant]):
 class SellerProductSerializer(_PricedProductFields, serializers.ModelSerializer[Product]):
     category = CategoryRefSerializer(read_only=True)
     variants_count = serializers.IntegerField(read_only=True)
+    stock_total = serializers.IntegerField(
+        read_only=True, help_text="Units on hand over the active variants."
+    )
+    reserved_total = serializers.IntegerField(
+        read_only=True, help_text="Units held by open orders over the active variants."
+    )
 
     class Meta:
         model = Product
@@ -225,6 +231,8 @@ class SellerProductSerializer(_PricedProductFields, serializers.ModelSerializer[
             "max_price_tiyin",
             "in_stock",
             "variants_count",
+            "stock_total",
+            "reserved_total",
             "image_url",
             "created_at",
             "updated_at",
@@ -251,7 +259,10 @@ class ProductCreateSerializer(serializers.Serializer[Any]):
     status = serializers.ChoiceField(
         choices=PRODUCT_STATUS_CHOICES,
         default=ProductStatus.DRAFT.value,
-        help_text="draft or active; a new product cannot start archived.",
+        help_text=(
+            "draft (default). A new product has no variants yet, so active is rejected "
+            "and archived is not allowed: create a draft, add variants, then activate it."
+        ),
     )
 
     def validate_status(self, value: str) -> str:
@@ -266,7 +277,11 @@ class ProductUpdateSerializer(serializers.Serializer[Any]):
     category_id = serializers.PrimaryKeyRelatedField(
         queryset=Category.objects.filter(is_active=True), required=False
     )
-    status = serializers.ChoiceField(choices=PRODUCT_STATUS_CHOICES, required=False)
+    status = serializers.ChoiceField(
+        choices=PRODUCT_STATUS_CHOICES,
+        required=False,
+        help_text="active needs at least one active variant.",
+    )
 
 
 class VariantCreateSerializer(serializers.Serializer[Any]):

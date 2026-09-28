@@ -24,7 +24,7 @@ from products.models import (
     ProductVariant,
     VariantAttribute,
 )
-from products.storage import IMAGE_EXTENSIONS, product_prefix
+from products.storage import IMAGE_EXTENSIONS, delete_objects, product_prefix
 from py_common.web.drf import ApiError
 from sellers.models import Seller
 from slugs import unique_slug
@@ -74,6 +74,25 @@ def _sku_taken(sku: str) -> ApiError:
     return ApiError("SKU_TAKEN", "This SKU is already used.", status=409, details={"sku": sku})
 
 
+NEEDS_ACTIVE_VARIANT = (
+    "A product needs at least one active variant before it can be active. "
+    "Save it as a draft, add variants, then activate it."
+)
+
+
+def _needs_active_variant() -> ApiError:
+    return ApiError(
+        "VALIDATION_ERROR", NEEDS_ACTIVE_VARIANT, details={"status": [NEEDS_ACTIVE_VARIANT]}
+    )
+
+
+def _has_active_variant(product: Product, *, excluding: UUID | None = None) -> bool:
+    variants = product.variants.filter(is_active=True)
+    if excluding is not None:
+        variants = variants.exclude(id=excluding)
+    return variants.exists()
+
+
 # --- products -----------------------------------------------------------------------
 
 
@@ -85,6 +104,9 @@ def create_product(
     description: str = "",
     status: str = ProductStatus.DRAFT.value,
 ) -> Product:
+    if status == ProductStatus.ACTIVE.value:
+        # A new product has no variants yet, so it can only start as a draft.
+        raise _needs_active_variant()
     with transaction.atomic():
         for attempt in range(SLUG_ATTEMPTS):
             slug = unique_slug(Product, title, max_length=PRODUCT_SLUG_MAX_LENGTH)
@@ -118,6 +140,8 @@ def update_product(
 ) -> Product:
     with transaction.atomic():
         product = _lock_product(seller, product_id)
+        if status == ProductStatus.ACTIVE.value and not _has_active_variant(product):
+            raise _needs_active_variant()
         if title is not None:
             product.title = title
         if description is not None:
@@ -228,6 +252,8 @@ def update_variant(
             variant.sku = sku
         if price_tiyin is not None:
             variant.price_tiyin = price_tiyin
+        if is_active is False and variant.is_active:
+            _ensure_not_last_active_variant(product, variant)
         if is_active is not None:
             variant.is_active = is_active
         try:
@@ -238,6 +264,20 @@ def update_variant(
         _touch(product)
         record_product_change(product)
     return variant
+
+
+def _ensure_not_last_active_variant(product: Product, variant: ProductVariant) -> None:
+    """An active product must keep a sellable variant; the product row lock makes it safe."""
+    if product.status == ProductStatus.ACTIVE.value and not _has_active_variant(
+        product, excluding=variant.id
+    ):
+        raise ApiError(
+            "LAST_ACTIVE_VARIANT",
+            "The last active variant of an active product cannot be deactivated. "
+            "Set the product to draft first.",
+            status=409,
+            details={"variant_id": str(variant.id)},
+        )
 
 
 def set_variant_stock(seller: Seller, variant_id: UUID, stock: int) -> ProductVariant:
@@ -308,6 +348,53 @@ def attach_image(seller: Seller, product_id: UUID, key: str) -> ProductImage:
         image_id = str(image.id)
         transaction.on_commit(lambda: process_product_image.delay(image_id))
     return image
+
+
+def _stored_keys(image: ProductImage) -> list[str]:
+    keys = (image.original_key, image.thumb_key, image.medium_key, image.large_key)
+    return [key for key in keys if key]
+
+
+def _delete_stored_objects(keys: list[str]) -> None:
+    """Best effort: an object left behind costs storage, never a failed request."""
+    try:
+        delete_objects(keys)
+    except Exception:
+        logger.exception("image objects were not deleted", extra={"keys": keys})
+
+
+def _renumber_images(product: Product) -> None:
+    """Close the gap a deleted image left: positions become 0..n-1 in display order."""
+    images = list(product.images.select_for_update().order_by("position", "created_at", "id"))
+    changed = []
+    for position, image in enumerate(images):
+        if image.position != position:
+            image.position = position
+            changed.append(image)
+    ProductImage.objects.bulk_update(changed, ["position"])
+
+
+def delete_image(seller: Seller, product_id: UUID, image_id: UUID) -> None:
+    """Remove an image of the seller's product; its stored files go after the commit."""
+    with transaction.atomic():
+        product = _lock_product(seller, product_id)
+        image = (
+            ProductImage.objects.select_for_update().filter(id=image_id, product=product).first()
+        )
+        if image is None:
+            raise _not_found("Image")
+        keys = _stored_keys(image)
+        image.delete()
+        _renumber_images(product)
+        _touch(product)
+        record_product_change(product)
+        transaction.on_commit(lambda: _delete_stored_objects(keys))
+
+
+def discard_orphan_renditions(image_id: UUID, keys: list[str]) -> None:
+    """Renditions stored for an image that was deleted while it was being processed."""
+    if not ProductImage.objects.filter(id=image_id).exists():
+        _delete_stored_objects(keys)
 
 
 @dataclass(frozen=True, slots=True)

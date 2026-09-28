@@ -107,3 +107,17 @@ def upload(key: str, data: bytes, content_type: str) -> None:
         ContentType=content_type,
         CacheControl="public, max-age=31536000, immutable",
     )
+
+
+def delete_objects(keys: list[str]) -> None:
+    """Delete objects by key; keys that do not exist are not an error in S3."""
+    if not keys:
+        return
+    response = internal_client().delete_objects(
+        Bucket=settings.S3_BUCKET,
+        Delete={"Objects": [{"Key": key} for key in keys], "Quiet": True},
+    )
+    errors = response.get("Errors", [])
+    if errors:
+        failed = ", ".join(str(error.get("Key")) for error in errors)
+        raise RuntimeError(f"S3 refused to delete: {failed}")

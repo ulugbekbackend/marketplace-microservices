@@ -32,6 +32,8 @@ Defined as CSS variables in `packages/ui/src/styles/tokens.css` and mapped into 
 | `--color-success` | `#1E8A4C` | `#4CC27F` | |
 | `--color-info` | `#2F6FB5` | `#6FA6E6` | |
 | `--color-purple` | `#6B4BC4` | `#A58BF0` | shipped |
+| `--color-chart-gross` | `#C27410` | `#C47F1E` | chart series: gross revenue |
+| `--color-chart-net` | `#12876A` | `#23997A` | chart series: net revenue |
 
 Derived tokens keep every text pair at WCAG AA (defined next to the brand values in `packages/ui/src/styles/tokens.css`):
 - `--color-accent-ink` (`#8A5100` light / `#F4B04A` dark) — price and accent **text**. The brand amber on white is only 2.2:1, so never use `--color-accent` for text.
@@ -55,12 +57,16 @@ Neutrals are a warm gray scale. Dark mode is mandatory: `class="dark"` on `<html
 ## Components (`packages/ui`)
 Button (primary / secondary / ghost / danger; sizes sm/md/lg; `loading` shows spinner and keeps width), Input, Select, Checkbox, RangeSlider, Badge, Card, ProductCard, PriceTag (current price in accent, old price struck-through muted, discount % badge), QtyStepper (1..99), Tabs, Dialog, Drawer, Toast, Skeleton, EmptyState (icon + title + action), DataTable, Stepper/Timeline, CountdownTimer (mm:ss, turns danger under 2 min), OtpInput (6 cells, auto-advance, paste support), ImageUploader (drag & drop, progress, `processing` state).
 
+Timeline: `<Timeline label items={[{id, title, time?, description?, tone?}]} upcoming? compact? />` — an `<ol>`, oldest first, last item is the current step; `upcoming` renders dimmed future steps. Used for order and sub-order history in both apps.
+
+Charts (Recharts, lazy-loaded): series colors only from the `--color-chart-*` tokens; the SVG is `aria-hidden` and the same data is given as a caption plus a visually hidden table.
+
 Every component: keyboard operable, visible focus ring (`2px` primary outline, offset 2), proper `aria-*`, forwards `className` and `ref`.
 
 ## Order status colors (shop and seller identical)
 | Status | Badge |
 |---|---|
-| PENDING | gray |
+| PENDING / NEW (sub-order) | gray |
 | RESERVED | info (blue) |
 | PAID | success (green) |
 | ACCEPTED / FULFILLING | info |

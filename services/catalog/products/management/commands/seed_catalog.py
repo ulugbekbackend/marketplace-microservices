@@ -20,7 +20,7 @@ from contracts.enums import ProductStatus
 from contracts.events import SellerApproved, build_event
 from products import storage
 from products.models import Attribute, AttributeValue, Category, Product
-from products.services import attach_image, create_product, create_variant
+from products.services import attach_image, create_product, create_variant, update_product
 from py_common.demo import SELLERS, DemoSeller, demo_id
 from sellers.models import Seller
 from sellers.services import handle_seller_approved
@@ -191,9 +191,10 @@ class Command(BaseCommand):
                         f"{title} — {seller.shop_name} do'konidan. "
                         "Rasmiy kafolat, tez yetkazib berish."
                     ),
-                    status=ProductStatus.ACTIVE.value,
                 )
                 variants += self._variants(seller, product, plan, values, rng)
+                # Activate once the product has variants: an empty product cannot be active.
+                update_product(seller, product.id, status=ProductStatus.ACTIVE.value)
                 if with_images:
                     self._image(seller, product, PALETTE[created % len(PALETTE)])
                 created += 1

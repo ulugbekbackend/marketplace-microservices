@@ -41,6 +41,7 @@ export type OrderStatus =
   | 'PENDING'
   | 'RESERVED'
   | 'PAID'
+  | 'NEW'
   | 'ACCEPTED'
   | 'FULFILLING'
   | 'SHIPPED'
@@ -51,11 +52,15 @@ export type OrderStatus =
   | 'REFUNDED'
   | 'EXPIRED'
 
-/** Order status -> badge tone. Identical in the shop and the seller cabinet. */
+/**
+ * Order and sub-order status -> badge tone. Identical in the shop and the seller cabinet. A new
+ * sub-order (paid, not yet accepted by the seller) looks like a pending one.
+ */
 export const ORDER_STATUS_TONE: Record<OrderStatus, BadgeTone> = {
   PENDING: 'neutral',
   RESERVED: 'info',
   PAID: 'success',
+  NEW: 'neutral',
   ACCEPTED: 'info',
   FULFILLING: 'info',
   SHIPPED: 'purple',

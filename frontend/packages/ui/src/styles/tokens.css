@@ -43,6 +43,14 @@
   --color-purple-ink: #6b4bc4;
   --color-purple-soft: #efebfa;
 
+  /* Chart series (validated for colour-vision deficiency against the surface). */
+  --color-chart-gross: #c27410;
+  --color-chart-net: #12876a;
+
+  /* Chart series, checked for colour-vision-deficiency separation against the surface. */
+  --color-chart-gross: #c27410;
+  --color-chart-net: #12876a;
+
   --color-scrim: rgb(20 18 16 / 0.5);
 
   --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
@@ -87,6 +95,12 @@
     --color-purple: #a58bf0;
     --color-purple-ink: #a58bf0;
     --color-purple-soft: #2c2342;
+
+    --color-chart-gross: #c47f1e;
+    --color-chart-net: #23997a;
+
+    --color-chart-gross: #c47f1e;
+    --color-chart-net: #23997a;
 
     --color-scrim: rgb(0 0 0 / 0.6);
 

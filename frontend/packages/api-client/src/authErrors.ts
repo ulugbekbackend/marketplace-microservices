@@ -1,4 +1,4 @@
-import { CLIENT_ERROR, isApiError } from '@bozorcha/api-client'
+import { CLIENT_ERROR, isApiError } from './errors'
 
 export const AUTH_ERROR_KEYS = [
   'OTP_INVALID',
@@ -22,7 +22,14 @@ export function loginErrorKey(error: unknown): LoginErrorKey {
 
 /** Seconds to wait before another code may be requested, when the API says so. */
 export function retryAfterSeconds(error: unknown): number | null {
-  if (!isApiError(error) || typeof error.details !== 'object' || error.details === null) return null
-  const value = (error.details as Record<string, unknown>).retry_after
+  const value = errorDetail(error, 'retry_after')
   return typeof value === 'number' && value > 0 ? Math.ceil(value) : null
+}
+
+/** One field of an ApiError's `details` object, or undefined. */
+export function errorDetail(error: unknown, key: string): unknown {
+  if (!isApiError(error) || typeof error.details !== 'object' || error.details === null) {
+    return undefined
+  }
+  return (error.details as Record<string, unknown>)[key]
 }

@@ -293,6 +293,9 @@ export function reservedOrder(minutesLeft = 11.5) {
       seller_id: group.seller_id,
       shop_name: group.shop_name,
       sub_order_id: null,
+      cancel_reason: null,
+      tracking_number: null,
+      history: [],
       status: null,
       subtotal_tiyin: group.subtotal_tiyin,
       items: group.items.map((item, i) => ({

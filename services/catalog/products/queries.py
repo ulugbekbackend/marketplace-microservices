@@ -2,7 +2,20 @@
 
 from typing import Any
 
-from django.db.models import Count, Exists, F, Max, Min, OuterRef, Prefetch, Q, QuerySet
+from django.db.models import (
+    Count,
+    Exists,
+    F,
+    Max,
+    Min,
+    OuterRef,
+    Prefetch,
+    Q,
+    QuerySet,
+    Sum,
+    Value,
+)
+from django.db.models.functions import Coalesce
 
 from contracts.enums import ProductStatus
 from products.models import Category, ImageStatus, Product, ProductImage, ProductVariant
@@ -53,9 +66,15 @@ def public_product_detail() -> QuerySet[Product]:
 def seller_products(seller: Seller) -> QuerySet[Product]:
     """All of a seller's products in any status, with everything the seller UI shows."""
     variants = ProductVariant.objects.prefetch_related("attribute_values__attribute")
+    active_variant = Q(variants__is_active=True)
     return (
         _with_prices(Product.objects.filter(seller=seller))
-        .annotate(variants_count=Count("variants", distinct=True))
+        .annotate(
+            variants_count=Count("variants", distinct=True),
+            # One join on variants for all aggregates, so the sums see each variant once.
+            stock_total=Coalesce(Sum("variants__stock", filter=active_variant), Value(0)),
+            reserved_total=Coalesce(Sum("variants__reserved", filter=active_variant), Value(0)),
+        )
         .select_related("seller", "category")
         .prefetch_related(
             _ready_images(),
