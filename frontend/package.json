@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "pnpm --filter shop dev",
+    "dev:seller": "pnpm --filter seller dev",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck && tsc -p tsconfig.json",
     "lint": "pnpm -r lint && eslint scripts eslint.config.js",
@@ -15,7 +16,8 @@
     "gen-api": "pnpm --filter @bozorcha/api-client gen-api",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "screenshots": "tsx scripts/screenshots.ts"
+    "screenshots": "tsx scripts/screenshots.ts",
+    "screenshots:seller": "tsx scripts/seller-screenshots.ts"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

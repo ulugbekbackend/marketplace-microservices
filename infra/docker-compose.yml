@@ -123,6 +123,8 @@ services:
     environment:
       MINIO_ROOT_USER: ${S3_ACCESS_KEY}
       MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY}
+      # Sellers upload images straight from the browser with presigned PUT URLs.
+      MINIO_API_CORS_ALLOW_ORIGIN: http://seller.localhost,http://shop.localhost
     volumes:
       - minio-data:/data
     networks: [edge, internal]
@@ -364,3 +366,21 @@ services:
       - traefik.enable=true
       - traefik.http.routers.shop.rule=Host(`shop.localhost`)
       - traefik.http.services.shop.loadbalancer.server.port=8080
+
+  seller:
+    build:
+      context: ../frontend
+      dockerfile: apps/seller/Dockerfile
+      args:
+        VITE_API_URL: http://seller.localhost
+    networks: [edge]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.seller.rule=Host(`seller.localhost`)
+      - traefik.http.services.seller.loadbalancer.server.port=8080
