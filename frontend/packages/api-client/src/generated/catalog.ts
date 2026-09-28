@@ -120,6 +120,23 @@ export type paths = {
     patch?: never
     trace?: never
   }
+  '/api/catalog/seller/products/{product_id}/images/{image_id}/': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post?: never
+    /** @description Resolves the caller's shop after the IsSeller check; unknown shops get 403. */
+    delete: operations['seller_images_delete']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/catalog/seller/products/{product_id}/variants/': {
     parameters: {
       query?: never
@@ -274,6 +291,13 @@ export type components = {
       /** Format: uuid */
       category_id?: string
       description?: string
+      /**
+       * @description active needs at least one active variant.
+       *
+       *     * `draft` - Draft
+       *     * `active` - Active
+       *     * `archived` - Archived
+       */
       status?: components['schemas']['ProductStatusEnum']
       title?: string
     }
@@ -337,7 +361,7 @@ export type components = {
       /** @default  */
       description: string
       /**
-       * @description draft or active; a new product cannot start archived.
+       * @description draft (default). A new product has no variants yet, so active is rejected and archived is not allowed: create a draft, add variants, then activate it.
        *
        *     * `draft` - Draft
        *     * `active` - Active
@@ -418,8 +442,12 @@ export type components = {
       readonly max_price_tiyin: number | null
       /** @description Lowest active variant price, tiyin. */
       readonly min_price_tiyin: number | null
+      /** @description Units held by open orders over the active variants. */
+      readonly reserved_total: number
       slug: string
       status?: components['schemas']['ProductStatusEnum']
+      /** @description Units on hand over the active variants. */
+      readonly stock_total: number
       title: string
       /** Format: date-time */
       readonly updated_at: string
@@ -439,8 +467,12 @@ export type components = {
       readonly max_price_tiyin: number | null
       /** @description Lowest active variant price, tiyin. */
       readonly min_price_tiyin: number | null
+      /** @description Units held by open orders over the active variants. */
+      readonly reserved_total: number
       slug: string
       status?: components['schemas']['ProductStatusEnum']
+      /** @description Units on hand over the active variants. */
+      readonly stock_total: number
       title: string
       /** Format: date-time */
       readonly updated_at: string
@@ -737,6 +769,34 @@ export interface operations {
       }
     }
   }
+  seller_images_delete: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        image_id: string
+        product_id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Deleted; the stored files are removed after it. */
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      /** @description Not the seller's product or image. */
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
   seller_variants_create: {
     parameters: {
       query?: never
@@ -813,6 +873,13 @@ export interface operations {
         content: {
           'application/json': components['schemas']['SellerVariant']
         }
+      }
+      /** @description SKU_TAKEN, or LAST_ACTIVE_VARIANT when deactivating the last active variant of an active product. */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
       }
     }
   }

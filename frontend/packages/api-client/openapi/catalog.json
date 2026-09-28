@@ -424,6 +424,46 @@
         }
       }
     },
+    "/api/catalog/seller/products/{product_id}/images/{image_id}/": {
+      "delete": {
+        "operationId": "seller_images_delete",
+        "description": "Resolves the caller's shop after the IsSeller check; unknown shops get 403.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "image_id",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true
+          },
+          {
+            "in": "path",
+            "name": "product_id",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true
+          }
+        ],
+        "tags": ["seller"],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted; the stored files are removed after it."
+          },
+          "404": {
+            "description": "Not the seller's product or image."
+          }
+        }
+      }
+    },
     "/api/catalog/seller/products/{product_id}/variants/": {
       "post": {
         "operationId": "seller_variants_create",
@@ -573,6 +613,9 @@
               }
             },
             "description": ""
+          },
+          "409": {
+            "description": "SKU_TAKEN, or LAST_ACTIVE_VARIANT when deactivating the last active variant of an active product."
           }
         }
       }
@@ -865,7 +908,12 @@
             "format": "uuid"
           },
           "status": {
-            "$ref": "#/components/schemas/ProductStatusEnum"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ProductStatusEnum"
+              }
+            ],
+            "description": "active needs at least one active variant.\n\n* `draft` - Draft\n* `active` - Active\n* `archived` - Archived"
           }
         }
       },
@@ -1046,7 +1094,7 @@
               }
             ],
             "default": "draft",
-            "description": "draft or active; a new product cannot start archived.\n\n* `draft` - Draft\n* `active` - Active\n* `archived` - Archived"
+            "description": "draft (default). A new product has no variants yet, so active is rejected and archived is not allowed: create a draft, add variants, then activate it.\n\n* `draft` - Draft\n* `active` - Active\n* `archived` - Archived"
           }
         },
         "required": ["category_id", "title"]
@@ -1312,6 +1360,16 @@
             "type": "integer",
             "readOnly": true
           },
+          "stock_total": {
+            "type": "integer",
+            "readOnly": true,
+            "description": "Units on hand over the active variants."
+          },
+          "reserved_total": {
+            "type": "integer",
+            "readOnly": true,
+            "description": "Units held by open orders over the active variants."
+          },
           "image_url": {
             "type": "string",
             "nullable": true,
@@ -1336,7 +1394,9 @@
           "in_stock",
           "max_price_tiyin",
           "min_price_tiyin",
+          "reserved_total",
           "slug",
+          "stock_total",
           "title",
           "updated_at",
           "variants_count"
@@ -1390,6 +1450,16 @@
             "type": "integer",
             "readOnly": true
           },
+          "stock_total": {
+            "type": "integer",
+            "readOnly": true,
+            "description": "Units on hand over the active variants."
+          },
+          "reserved_total": {
+            "type": "integer",
+            "readOnly": true,
+            "description": "Units held by open orders over the active variants."
+          },
           "image_url": {
             "type": "string",
             "nullable": true,
@@ -1432,7 +1502,9 @@
           "in_stock",
           "max_price_tiyin",
           "min_price_tiyin",
+          "reserved_total",
           "slug",
+          "stock_total",
           "title",
           "updated_at",
           "variants",
