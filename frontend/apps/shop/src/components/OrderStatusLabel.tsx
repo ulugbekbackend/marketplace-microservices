@@ -1,7 +1,6 @@
 import type { OrderStatus, SubOrderStatus } from '@bozorcha/api-client'
-import { Badge, OrderStatusBadge } from '@bozorcha/ui'
+import { OrderStatusBadge } from '@bozorcha/ui'
 import { useTranslation } from 'react-i18next'
-import { subOrderTone } from '../lib/orders'
 
 export function OrderStatusLabel({
   status,
@@ -18,11 +17,8 @@ export function OrderStatusLabel({
   )
 }
 
+/** Same shared colours (ui ORDER_STATUS_TONE) the seller sees for this sub-order. */
 export function SubOrderStatusLabel({ status }: { status: SubOrderStatus }) {
   const { t } = useTranslation()
-  return (
-    <Badge tone={subOrderTone(status)} dot data-status={status}>
-      {t(`orders.subStatus.${status}`)}
-    </Badge>
-  )
+  return <OrderStatusBadge status={status}>{t(`orders.subStatus.${status}`)}</OrderStatusBadge>
 }

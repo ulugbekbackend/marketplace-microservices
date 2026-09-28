@@ -2,6 +2,11 @@ import type {
   Attribute,
   Category,
   SellerApplication,
+  SellerDailyStats,
+  SellerPeriodStats,
+  SellerStats,
+  SellerSubOrder,
+  SellerSubOrderDetail,
   SellerProduct,
   SellerProductDetail,
   SellerVariant,
@@ -104,4 +109,88 @@ export const panelApi: Record<string, Route> = {
   'POST /api/auth/token/refresh/': () => json(200, { access: 'a2', refresh: 'r2' }),
   'GET /api/catalog/attributes/': () => json(200, attributes),
   'GET /api/catalog/categories/': () => json(200, categories),
+  'GET /api/orders/seller/stats/': () => json(200, sellerStats()),
+  'GET /api/orders/seller/': () => json(200, { items: [], total: 0, page: 1, page_size: 20 }),
 }
+
+/* ------------------------------------------------------------------ orders */
+
+export const period = (orders = 0, gross = 0): SellerPeriodStats => ({
+  orders,
+  gross_tiyin: gross,
+  net_tiyin: Math.round(gross * 0.9),
+})
+
+/** 30 days ending 2026-09-27; `sales` maps a day of month to [orders, gross tiyin]. */
+export const dailyStats = (sales: Record<number, [number, number]> = {}): SellerDailyStats[] =>
+  Array.from({ length: 30 }, (_, i) => {
+    const date = new Date(Date.UTC(2026, 7, 29 + i)).toISOString().slice(0, 10)
+    const [orders, gross] = sales[Number(date.slice(8))] ?? [0, 0]
+    return { date, ...period(orders, gross) }
+  })
+
+export const sellerStats = (patch: Partial<SellerStats> = {}): SellerStats => ({
+  today: period(2, 90_000_000),
+  week: period(5, 225_000_000),
+  month: period(12, 525_000_000),
+  daily: dailyStats({ 26: [3, 135_000_000], 27: [2, 90_000_000] }),
+  by_status: { NEW: 3, ACCEPTED: 2, SHIPPED: 1, DELIVERED: 4, CANCELLED_BY_SELLER: 1 },
+  ...patch,
+})
+
+export const emptyStats = (): SellerStats => ({
+  today: period(),
+  week: period(),
+  month: period(),
+  daily: dailyStats(),
+  by_status: { NEW: 0, ACCEPTED: 0, SHIPPED: 0, DELIVERED: 0, CANCELLED_BY_SELLER: 0 },
+})
+
+export const subOrder = (patch: Partial<SellerSubOrder> = {}): SellerSubOrder => ({
+  id: 's1',
+  order_id: 'a1b2c3d4-0000-4000-8000-000000000001',
+  status: 'NEW',
+  subtotal_tiyin: 90_000_000,
+  commission_tiyin: 9_000_000,
+  net_tiyin: 81_000_000,
+  items_count: 2,
+  created_at: '2026-09-27T09:00:00Z',
+  updated_at: '2026-09-27T09:00:00Z',
+  customer_name: 'Aziza Karimova',
+  city: 'Toshkent',
+  ...patch,
+})
+
+export const subOrderDetail = (
+  patch: Partial<SellerSubOrderDetail> = {},
+): SellerSubOrderDetail => ({
+  ...subOrder(),
+  commission_rate: '0.1000',
+  tracking_number: '',
+  cancel_reason: '',
+  items: [
+    {
+      id: 'i1',
+      variant_id: 'v1',
+      title: "Atlas ko'ylak (Qizil)",
+      sku: 'ATLAS-QIZIL',
+      image: 'https://img.test/atlas.webp',
+      price_tiyin: 45_000_000,
+      qty: 2,
+      line_total_tiyin: 90_000_000,
+    },
+  ],
+  delivery_address: {
+    full_name: 'Aziza Karimova',
+    phone: '+998901112233',
+    region: 'Toshkent shahri',
+    city: 'Toshkent',
+    street: 'Navoiy 12',
+    notes: 'Kechqurun',
+  },
+  order_status: 'PAID',
+  history: [
+    { from_status: null, to_status: 'NEW', reason: '', created_at: '2026-09-27T09:00:00Z' },
+  ],
+  ...patch,
+})

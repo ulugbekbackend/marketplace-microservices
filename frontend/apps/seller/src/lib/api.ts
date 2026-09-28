@@ -27,6 +27,7 @@ export const apiClient = createApiClient({
     queryClient.removeQueries({ queryKey: queryKeys.me })
     queryClient.removeQueries({ queryKey: queryKeys.sellerApplication })
     queryClient.removeQueries({ queryKey: queryKeys.sellerProducts })
+    queryClient.removeQueries({ queryKey: queryKeys.sellerOrders })
     sessionExpiredListeners.forEach((listener) => listener())
   },
 })

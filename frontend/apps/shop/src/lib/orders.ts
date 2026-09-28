@@ -1,5 +1,4 @@
-import type { OrderStatus, SubOrderStatus } from '@bozorcha/api-client'
-import { ORDER_STATUS_TONE, type BadgeTone } from '@bozorcha/ui'
+import type { OrderStatus } from '@bozorcha/api-client'
 
 /**
  * The dev-only "To'lash (test)" button: on in the Vite dev server, and in builds made with
@@ -13,10 +12,6 @@ export const orderNumber = (id: string) => `#${id.slice(0, 8).toUpperCase()}`
 
 /** The customer can still cancel. */
 export const isCancellable = (status: OrderStatus) => status === 'PENDING' || status === 'RESERVED'
-
-/** Sub-order badges use the shared status colours; a new sub-order looks like a pending one. */
-export const subOrderTone = (status: SubOrderStatus): BadgeTone =>
-  status === 'NEW' ? ORDER_STATUS_TONE.PENDING : ORDER_STATUS_TONE[status]
 
 export const CANCEL_REASONS = [
   'OUT_OF_STOCK',

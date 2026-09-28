@@ -14,10 +14,13 @@ import {
   Dialog,
   formatMmSs,
   formatPrice,
+  orderStatusTimelineTone,
   Skeleton,
   Spinner,
+  Timeline,
   useCountdown,
   useToast,
+  type TimelineItem,
 } from '@bozorcha/ui'
 import {
   ArrowLeft,
@@ -30,6 +33,7 @@ import {
   RotateCcw,
   Store,
   TimerOff,
+  Truck,
 } from 'lucide-react'
 import { useEffect, useId, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -460,8 +464,73 @@ function SellerGroup({ group }: { group: OrderSellerGroup }) {
           <span>{t('orders.subtotal')}</span>
           <span className="font-semibold text-text">{formatPrice(group.subtotal_tiyin)}</span>
         </p>
+        <SubOrderProgress group={group} />
       </section>
     </Card>
+  )
+}
+
+/** The shop's part of the order after payment: tracking, cancellation and its own history. */
+function SubOrderProgress({ group }: { group: OrderSellerGroup }) {
+  const { t } = useTranslation()
+  if (!group.status || group.history.length === 0) return null
+  const tracking =
+    (group.status === 'SHIPPED' || group.status === 'DELIVERED') && group.tracking_number
+  const cancelled = group.status === 'CANCELLED_BY_SELLER'
+  const items: TimelineItem[] = group.history.map((entry) => ({
+    id: `${entry.to_status}-${entry.created_at}`,
+    title: t(`orders.subStatus.${entry.to_status}`),
+    time: formatDateTime(entry.created_at),
+    dateTime: entry.created_at,
+    tone: orderStatusTimelineTone(entry.to_status),
+  }))
+  return (
+    <div className="flex flex-col gap-3 border-t border-border px-4 py-4 sm:px-5">
+      {tracking && (
+        <div
+          className="flex items-start gap-3 rounded-lg bg-purple-soft px-3 py-2.5"
+          data-testid="tracking"
+        >
+          <Truck
+            aria-hidden="true"
+            size={20}
+            strokeWidth={1.75}
+            className="mt-0.5 shrink-0 text-purple-ink"
+          />
+          <div className="flex min-w-0 flex-col">
+            <span className="text-xs text-text-muted">{t('orders.tracking')}</span>
+            <span className="font-semibold [overflow-wrap:anywhere] text-text tabular">
+              {group.tracking_number}
+            </span>
+            <span className="text-xs text-text-muted">{t('orders.trackingHint')}</span>
+          </div>
+        </div>
+      )}
+      {cancelled && (
+        <div
+          role="note"
+          className="flex items-start gap-3 rounded-lg bg-danger-soft px-3 py-2.5"
+          data-testid="seller-cancelled"
+        >
+          <CircleX
+            aria-hidden="true"
+            size={20}
+            strokeWidth={1.75}
+            className="mt-0.5 shrink-0 text-danger-ink"
+          />
+          <div className="flex min-w-0 flex-col gap-0.5 text-sm">
+            <span className="font-semibold text-text">{t('orders.cancelledBySeller')}</span>
+            {group.cancel_reason && (
+              <span className="[overflow-wrap:anywhere] text-text">
+                {t('orders.sellerReason', { reason: group.cancel_reason })}
+              </span>
+            )}
+            <span className="text-text-muted">{t('orders.refundNote')}</span>
+          </div>
+        </div>
+      )}
+      <Timeline compact label={t('orders.shopHistory', { shop: group.shop_name })} items={items} />
+    </div>
   )
 }
 
@@ -515,43 +584,22 @@ function History({ order }: { order: Order }) {
   return (
     <Card className="flex flex-col gap-3 dark:shadow-none">
       <h2 className="font-heading text-base font-bold text-text">{t('orders.history')}</h2>
-      <ol className="flex flex-col" aria-label={t('orders.history')}>
-        {order.history.map((entry, index) => {
-          const last = index === order.history.length - 1
+      <Timeline
+        compact
+        label={t('orders.history')}
+        items={order.history.map((entry) => {
           const reason = knownReason(entry.reason)
-          return (
-            <li
-              key={`${entry.to_status}-${entry.created_at}`}
-              className="relative flex gap-3 pb-4 last:pb-0"
-            >
-              {!last && (
-                <span
-                  aria-hidden="true"
-                  className="absolute top-3 bottom-0 left-[5px] w-px bg-border"
-                />
-              )}
-              <span
-                aria-hidden="true"
-                className={cn(
-                  'relative mt-1.5 size-[11px] shrink-0 rounded-full border-2',
-                  last ? 'border-primary bg-primary' : 'border-border bg-surface',
-                )}
-              />
-              <div className="flex min-w-0 flex-col">
-                <span className={cn('text-sm', last ? 'font-semibold text-text' : 'text-text')}>
-                  {t(`orders.status.${entry.to_status}`)}
-                </span>
-                <span className="text-xs text-text-muted tabular">
-                  {formatDateTime(entry.created_at)}
-                </span>
-                {reason && entry.to_status !== 'EXPIRED' && (
-                  <span className="text-xs text-text-muted">{t(`orders.reason.${reason}`)}</span>
-                )}
-              </div>
-            </li>
-          )
+          return {
+            id: `${entry.to_status}-${entry.created_at}`,
+            title: t(`orders.status.${entry.to_status}`),
+            time: formatDateTime(entry.created_at),
+            dateTime: entry.created_at,
+            tone: orderStatusTimelineTone(entry.to_status),
+            description:
+              reason && entry.to_status !== 'EXPIRED' ? t(`orders.reason.${reason}`) : undefined,
+          }
         })}
-      </ol>
+      />
     </Card>
   )
 }

@@ -24,6 +24,10 @@ import type {
   ProductUpdateRequest,
   SellerApplication,
   SellerApplyRequest,
+  SellerOrderListParams,
+  SellerStats,
+  SellerSubOrder,
+  SellerSubOrderDetail,
   SellerImage,
   SellerProduct,
   SellerProductDetail,
@@ -31,6 +35,7 @@ import type {
   SellerVariant,
   Shop,
   StockUpdateRequest,
+  SubOrderStatusChangeRequest,
   User,
   UserUpdateRequest,
   Uuid,
@@ -187,5 +192,30 @@ export function orderEndpoints(client: ApiClient) {
 
     /** Dev only: 404 when mock payments are disabled on the server. */
     payMock: (orderId: Uuid) => client.post<Order>(`/api/orders/${seg(orderId)}/pay/mock/`),
+  }
+}
+
+/** The seller cabinet side of the order service: the caller's sub-orders and sales numbers. */
+export function sellerOrderEndpoints(client: ApiClient) {
+  const base = '/api/orders/seller'
+  return {
+    /** Newest first. Statuses go out as one comma separated value. */
+    list: ({ status, ...params }: SellerOrderListParams = {}, signal?: AbortSignal) =>
+      client.get<Paginated<SellerSubOrder>>(`${base}/`, {
+        query: { ...params, status: status?.length ? status.join(',') : undefined },
+        signal,
+      }),
+
+    detail: (subOrderId: Uuid, signal?: AbortSignal) =>
+      client.get<SellerSubOrderDetail>(`${base}/${seg(subOrderId)}/`, { signal }),
+
+    /**
+     * 409 `INVALID_TRANSITION` when the sub-order already moved on, `ORDER_NOT_ACTIVE` when the
+     * order is no longer being fulfilled; 400 when the tracking number or reason is missing.
+     */
+    setStatus: (subOrderId: Uuid, body: SubOrderStatusChangeRequest) =>
+      client.patch<SellerSubOrderDetail>(`${base}/${seg(subOrderId)}/status/`, body),
+
+    stats: (signal?: AbortSignal) => client.get<SellerStats>(`${base}/stats/`, { signal }),
   }
 }

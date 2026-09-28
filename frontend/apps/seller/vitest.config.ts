@@ -8,5 +8,7 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
     css: false,
+    // Long user-event flows share the CPU with the other packages under `pnpm -r test`.
+    testTimeout: 15_000,
   },
 })

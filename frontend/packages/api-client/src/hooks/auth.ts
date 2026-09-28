@@ -54,6 +54,7 @@ export function useLogout() {
       queryClient.removeQueries({ queryKey: queryKeys.orders })
       queryClient.removeQueries({ queryKey: queryKeys.sellerApplication })
       queryClient.removeQueries({ queryKey: queryKeys.sellerProducts })
+      queryClient.removeQueries({ queryKey: queryKeys.sellerOrders })
       void queryClient.resetQueries({ queryKey: queryKeys.cart })
     },
   })

@@ -279,6 +279,69 @@ describe('OrderPage', () => {
     ).not.toBeInTheDocument()
   })
 
+  it('shows each shop its own timeline, tracking number and cancel reason', async () => {
+    const at = (min: number) => iso(NOW + min * 60_000)
+    const order = withStatus('FULFILLING', {
+      sellers: [
+        {
+          ...baseOrder.sellers[0]!,
+          sub_order_id: 'so1',
+          status: 'SHIPPED',
+          tracking_number: 'UZP123456789',
+          history: [
+            { from_status: null, to_status: 'NEW', reason: '', created_at: at(1) },
+            { from_status: 'NEW', to_status: 'ACCEPTED', reason: '', created_at: at(2) },
+            { from_status: 'ACCEPTED', to_status: 'SHIPPED', reason: '', created_at: at(3) },
+          ],
+        },
+        {
+          ...baseOrder.sellers[1]!,
+          sub_order_id: 'so2',
+          status: 'CANCELLED_BY_SELLER',
+          cancel_reason: "O'lcham qolmadi",
+          history: [
+            { from_status: null, to_status: 'NEW', reason: '', created_at: at(1) },
+            {
+              from_status: 'NEW',
+              to_status: 'CANCELLED_BY_SELLER',
+              reason: "O'lcham qolmadi",
+              created_at: at(4),
+            },
+          ],
+        },
+      ],
+    })
+    setup({ [`GET ${DETAIL}`]: () => json(200, order), [`GET ${STATUS}`]: statusOf(order) })
+
+    const rishton = await screen.findByRole('region', { name: 'Rishton sopol' })
+    const shipped = within(rishton).getByRole('list', { name: 'Rishton sopol: holat tarixi' })
+    const steps = within(shipped).getAllByRole('listitem')
+    expect(steps.map((step) => step.textContent)).toEqual([
+      expect.stringContaining('Yangi'),
+      expect.stringContaining('Qabul qilindi'),
+      expect.stringContaining("Yo'lda"),
+    ])
+    expect(steps[2]).toHaveAttribute('aria-current', 'step')
+    expect(within(rishton).getByTestId('tracking')).toHaveTextContent('UZP123456789')
+    expect(within(rishton).queryByTestId('seller-cancelled')).not.toBeInTheDocument()
+
+    const atlas = screen.getByRole('region', { name: "Marg'ilon atlas" })
+    const note = within(atlas).getByTestId('seller-cancelled')
+    expect(note).toHaveTextContent("Sabab: O'lcham qolmadi")
+    expect(note).toHaveTextContent('Bu qism uchun pul qaytariladi.')
+    expect(within(atlas).queryByTestId('tracking')).not.toBeInTheDocument()
+    expect(within(atlas).getAllByRole('listitem').at(-1)!.textContent).toContain(
+      'Sotuvchi bekor qildi',
+    )
+  })
+
+  it('shows no sub-order timeline before payment', async () => {
+    const order = withStatus('RESERVED')
+    setup({ [`GET ${DETAIL}`]: () => json(200, order), [`GET ${STATUS}`]: statusOf(order) })
+    await screen.findByRole('region', { name: 'Rishton sopol' })
+    expect(screen.queryByRole('list', { name: /holat tarixi/ })).not.toBeInTheDocument()
+  })
+
   it('shows not found for unknown or foreign orders', async () => {
     setup({
       [`GET ${DETAIL}`]: () => apiError(404, 'NOT_FOUND'),

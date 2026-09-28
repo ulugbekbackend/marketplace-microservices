@@ -2,7 +2,7 @@
  * Screenshots of the seller panel with a mocked API (Playwright route interception).
  *
  *   pnpm --filter seller build
- *   pnpm screenshots:seller <output-dir> [--url http://localhost:4180]
+ *   pnpm screenshots:seller <output-dir> [--url http://localhost:4180] [--only dashboard,orders]
  *
  * Without --url the script serves the built app with `vite preview` itself. Every page is shot at
  * 360px and 1280px in light and dark mode. The run fails if a page scrolls horizontally, an
@@ -26,6 +26,8 @@ type Shot = {
   role?: Role
   application?: 'approved' | 'pending' | 'none'
   emptyProducts?: boolean
+  /** No sales and no orders yet. */
+  noSales?: boolean
   prepare?: (page: Page) => Promise<void>
 }
 
@@ -239,11 +241,177 @@ const application = (status: 'approved' | 'pending') => ({
   created_at: at(0),
 })
 
+/* ------------------------------------------------------------------ orders */
+
+const customers = [
+  ['Aziza Karimova', 'Toshkent', 'Toshkent shahri', 'Chilonzor 9-kvartal, 14-uy'],
+  ['Jasur Toshmatov', "Farg'ona", "Farg'ona viloyati", "Mustaqillik ko'chasi, 21"],
+  ['Malika Rahimova', 'Samarqand', 'Samarqand viloyati', "Registon ko'chasi, 3"],
+  ['Bekzod Nazarov', 'Namangan', 'Namangan viloyati', "Navoiy ko'chasi, 45"],
+  ['Nilufar Yusupova', 'Buxoro', 'Buxoro viloyati', "Bahouddin Naqshband ko'chasi, 8"],
+  ['Sardor Aliyev', 'Andijon', 'Andijon viloyati', "Bobur shoh ko'chasi, 112"],
+  ['Dilfuza Ergasheva', 'Toshkent', 'Toshkent shahri', 'Yunusobod 4-mavze, 17-uy'],
+] as const
+
+const subStatuses = [
+  'NEW',
+  'NEW',
+  'ACCEPTED',
+  'NEW',
+  'SHIPPED',
+  'ACCEPTED',
+  'DELIVERED',
+  'CANCELLED_BY_SELLER',
+  'DELIVERED',
+  'SHIPPED',
+] as const
+
+const orderIds = [
+  '7f3c9a21',
+  'b41e0d7c',
+  '2a9f6e13',
+  'c85d1b40',
+  '93e7a2f6',
+  '5d0c8b19',
+  'e1f4a7d2',
+  '0b6d3c85',
+  'a7c2e940',
+  '4f81b6d3',
+]
+
+const hoursAgo = (h: number) => new Date(Date.UTC(2026, 8, 27, 12, 0) - h * 3_600_000).toISOString()
+const COMMISSION = 0.1
+const CANCEL_REASON = "Bu o'lcham omborda qolmadi, uzr so'raymiz"
+
+const subOrders = subStatuses.map((status, i) => {
+  const [name, city, region, street] = customers[i % customers.length]!
+  const lines = [details[i % 2 === 0 ? 0 : 1]!, ...(i % 3 === 0 ? [details[3]!] : [])]
+  const items = lines.map((product, j) => {
+    const variant = product.variants[0]!
+    const qty = 1 + ((i + j) % 2)
+    const values = variant.attributes.map((a) => a.value).join(', ')
+    return {
+      id: `item-${i}-${j}`,
+      variant_id: variant.id,
+      title: values ? `${product.title} (${values})` : product.title,
+      sku: variant.sku,
+      image: product.image_url,
+      price_tiyin: variant.price_tiyin,
+      qty,
+      line_total_tiyin: variant.price_tiyin * qty,
+    }
+  })
+  const subtotal = items.reduce((sum, item) => sum + item.line_total_tiyin, 0)
+  const commission = Math.round(subtotal * COMMISSION)
+  const created = hoursAgo(3 + i * 17)
+  const steps: string[] = ['NEW']
+  if (status === 'ACCEPTED' || status === 'SHIPPED' || status === 'DELIVERED') {
+    steps.push('ACCEPTED')
+  }
+  if (status === 'SHIPPED' || status === 'DELIVERED') steps.push('SHIPPED')
+  if (status === 'DELIVERED') steps.push('DELIVERED')
+  if (status === 'CANCELLED_BY_SELLER') steps.push('CANCELLED_BY_SELLER')
+  const history = steps.map((to, k) => ({
+    from_status: k === 0 ? null : steps[k - 1],
+    to_status: to,
+    reason: to === 'CANCELLED_BY_SELLER' ? CANCEL_REASON : '',
+    created_at: new Date(Date.parse(created) + k * 5 * 3_600_000).toISOString(),
+  }))
+  const summary = {
+    id: `5a0e${String(i).padStart(4, '0')}-1111-4222-8333-000000000${String(i).padStart(3, '0')}`,
+    order_id: `${orderIds[i]}-5b8e-4c1d-9f20-6a4e1b7d3c5${i}`,
+    status,
+    subtotal_tiyin: subtotal,
+    commission_tiyin: commission,
+    net_tiyin: subtotal - commission,
+    items_count: items.reduce((sum, item) => sum + item.qty, 0),
+    created_at: created,
+    updated_at: history.at(-1)!.created_at,
+    customer_name: name,
+    city,
+  }
+  const detail = {
+    ...summary,
+    commission_rate: '0.1000',
+    tracking_number: status === 'SHIPPED' || status === 'DELIVERED' ? `UZP${480120 + i}7731` : '',
+    cancel_reason: status === 'CANCELLED_BY_SELLER' ? CANCEL_REASON : '',
+    items,
+    delivery_address: {
+      full_name: name,
+      phone: `+9989012345${String(10 + i)}`,
+      region,
+      city,
+      street,
+      notes: i === 2 ? "Kechki soat 18:00 dan keyin qo'ng'iroq qiling" : '',
+    },
+    order_status:
+      status === 'DELIVERED' ? 'COMPLETED' : status === 'SHIPPED' ? 'FULFILLING' : 'PAID',
+    history,
+  }
+  return { summary, detail }
+})
+
+const byStatus = Object.fromEntries(
+  ['NEW', 'ACCEPTED', 'SHIPPED', 'DELIVERED', 'CANCELLED_BY_SELLER'].map((s) => [
+    s,
+    subOrders.filter((o) => o.summary.status === s).length,
+  ]),
+)
+
+const daily = Array.from({ length: 30 }, (_, i) => {
+  const date = new Date(Date.UTC(2026, 8, 27 - 29 + i)).toISOString().slice(0, 10)
+  const wave = Math.sin(i / 3.2) * 0.5 + 0.5
+  const orders = i % 7 === 5 ? 0 : Math.round(1 + wave * 4 + (i > 20 ? 2 : 0))
+  // Whole so'm amounts, like real prices.
+  const gross = orders * (38_000_000 + Math.round(wave * 21_000) * 1000)
+  const net = Math.round((gross * (1 - COMMISSION)) / 100) * 100
+  return { date, orders, gross_tiyin: gross, net_tiyin: net }
+})
+
+const period = (days: typeof daily) => ({
+  orders: days.reduce((s, d) => s + d.orders, 0),
+  gross_tiyin: days.reduce((s, d) => s + d.gross_tiyin, 0),
+  net_tiyin: days.reduce((s, d) => s + d.net_tiyin, 0),
+})
+
+const stats = {
+  today: period(daily.slice(-1)),
+  week: period(daily.slice(-7)),
+  month: period(daily.slice(-27)),
+  daily,
+  by_status: byStatus,
+}
+
+const zero = { orders: 0, gross_tiyin: 0, net_tiyin: 0 }
+const emptyStats = {
+  today: zero,
+  week: zero,
+  month: zero,
+  daily: daily.map((d) => ({ ...d, ...zero })),
+  by_status: { NEW: 0, ACCEPTED: 0, SHIPPED: 0, DELIVERED: 0, CANCELLED_BY_SELLER: 0 },
+}
+
 const SHOTS: Shot[] = [
   { name: 'login', path: '/login' },
   { name: 'onboarding-form', path: '/onboarding', role: 'customer', application: 'none' },
   { name: 'onboarding-pending', path: '/onboarding', role: 'customer', application: 'pending' },
   { name: 'dashboard', path: '/', role: 'seller' },
+  { name: 'dashboard-empty', path: '/', role: 'seller', noSales: true },
+  { name: 'orders', path: '/orders', role: 'seller' },
+  { name: 'orders-new', path: '/orders?status=NEW', role: 'seller' },
+  { name: 'orders-empty', path: '/orders', role: 'seller', noSales: true },
+  { name: 'order-new', path: `/orders/${subOrders[0]!.summary.id}`, role: 'seller' },
+  { name: 'order-shipped', path: `/orders/${subOrders[4]!.summary.id}`, role: 'seller' },
+  { name: 'order-cancelled', path: `/orders/${subOrders[7]!.summary.id}`, role: 'seller' },
+  {
+    name: 'order-cancel-dialog',
+    path: `/orders/${subOrders[2]!.summary.id}`,
+    role: 'seller',
+    prepare: async (page) => {
+      await page.getByRole('button', { name: 'Bekor qilish' }).click()
+      await page.getByRole('dialog').waitFor()
+    },
+  },
   {
     name: 'products',
     path: '/products',
@@ -280,18 +448,21 @@ const SHOTS: Shot[] = [
 function parseArgs(argv: string[]) {
   const positional: string[] = []
   let url: string | undefined
+  let only: string[] | undefined
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!
     if (arg === '--url') url = argv[++i]
     else if (arg.startsWith('--url=')) url = arg.slice('--url='.length)
+    else if (arg === '--only') only = argv[++i]?.split(',')
+    else if (arg.startsWith('--only=')) only = arg.slice('--only='.length).split(',')
     else positional.push(arg)
   }
   const outDir = positional[0]
   if (!outDir) {
-    console.error('Usage: pnpm screenshots:seller <output-dir> [--url <app-url>]')
+    console.error('Usage: pnpm screenshots:seller <output-dir> [--url <app-url>] [--only <names>]')
     process.exit(2)
   }
-  return { outDir: resolve(process.cwd(), outDir), url }
+  return { outDir: resolve(process.cwd(), outDir), url, only }
 }
 
 const json = (route: Route, status: number, body: unknown) =>
@@ -335,6 +506,23 @@ async function mockApi(page: Page, shot: Shot) {
         page_size: pageSize,
       })
     }
+    if (path === '/api/orders/seller/stats/') {
+      return json(route, 200, shot.noSales ? emptyStats : stats)
+    }
+    if (path === '/api/orders/seller/') {
+      const status = url.searchParams.get('status')?.split(',') ?? []
+      const pageSize = Number(url.searchParams.get('page_size') ?? 20)
+      let items = shot.noSales ? [] : subOrders.map((o) => o.summary)
+      if (status.length) items = items.filter((item) => status.includes(item.status))
+      return json(route, 200, {
+        items: items.slice(0, pageSize),
+        total: items.length,
+        page: 1,
+        page_size: pageSize,
+      })
+    }
+    const subOrder = subOrders.find((o) => path === `/api/orders/seller/${o.summary.id}/`)
+    if (subOrder) return json(route, 200, subOrder.detail)
     const detail = details.find((d) => path === `/api/catalog/seller/products/${d.id}/`)
     if (detail) return json(route, 200, detail)
     return json(route, 404, { error: { code: 'NOT_FOUND', message: 'Not found', details: {} } })
@@ -402,7 +590,8 @@ function stopPreview(preview: ChildProcess | undefined) {
 }
 
 async function main() {
-  const { outDir, url } = parseArgs(process.argv.slice(2))
+  const { outDir, url, only } = parseArgs(process.argv.slice(2))
+  const shots = only ? SHOTS.filter((shot) => only.includes(shot.name)) : SHOTS
   await mkdir(outDir, { recursive: true })
 
   let preview: ChildProcess | undefined
@@ -429,7 +618,7 @@ async function main() {
           localStorage.setItem('bozorcha.theme', JSON.stringify({ state: { mode }, version: 0 }))
         }, theme)
 
-        for (const shot of SHOTS) {
+        for (const shot of shots) {
           const page = await context.newPage()
           const errors: string[] = []
           page.on('console', (msg) => {

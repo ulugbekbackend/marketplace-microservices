@@ -174,3 +174,26 @@ export type UnavailableItem = {
   reason: 'not_found' | 'inactive' | 'out_of_stock'
   available: number
 }
+
+/* ----------------------------------------------------------- order: seller */
+
+export type SellerSubOrder = OrderSchemas['SellerSubOrder']
+export type SellerSubOrderDetail = OrderSchemas['SellerSubOrderDetail']
+export type SellerOrderItem = OrderSchemas['SellerItem']
+export type SubOrderHistoryEntry = OrderSchemas['SubOrderHistory']
+export type SubOrderTargetStatus = OrderSchemas['SubOrderTargetStatusEnum']
+export type SubOrderStatusChangeRequest = OrderSchemas['PatchedSubOrderStatusChangeRequest'] & {
+  status: SubOrderTargetStatus
+}
+export type SellerStats = OrderSchemas['SellerStats']
+export type SellerPeriodStats = OrderSchemas['PeriodStats']
+export type SellerDailyStats = OrderSchemas['DailyStats']
+export type SubOrderStatusCounts = OrderSchemas['StatusCounts']
+/** `status` is sent as one comma separated value (the server also accepts repeats). */
+export type SellerOrderListParams = NonNullable<
+  OrderOperations['seller_orders_list']['parameters']['query']
+>
+
+/** Error codes of the seller order endpoints (not part of the OpenAPI schema). */
+export type SellerOrderErrorCode =
+  'INVALID_TRANSITION' | 'ORDER_NOT_ACTIVE' | 'VALIDATION_ERROR' | 'NOT_FOUND'

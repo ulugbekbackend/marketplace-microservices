@@ -15,6 +15,7 @@ export {
   catalogEndpoints,
   orderEndpoints,
   sellerCatalogEndpoints,
+  sellerOrderEndpoints,
 } from './endpoints'
 export {
   AUTH_ERROR_KEYS,
@@ -75,5 +76,14 @@ export {
   useUpdateVariantStock,
   type StockUpdateVars,
 } from './hooks/seller'
+export {
+  invalidateSellerOrders,
+  SELLER_STATS_POLL_INTERVAL_MS,
+  useChangeSubOrderStatus,
+  useSellerOrder,
+  useSellerOrders,
+  useSellerOrderStats,
+  type SubOrderStatusVars,
+} from './hooks/sellerOrders'
 export { ApiProvider, useApi, useSession } from './hooks/context'
 export { queryKeys } from './hooks/keys'

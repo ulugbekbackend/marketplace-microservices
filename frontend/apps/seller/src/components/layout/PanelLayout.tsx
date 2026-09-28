@@ -1,4 +1,9 @@
-import { useMe, useSellerApplication } from '@bozorcha/api-client'
+import {
+  SELLER_STATS_POLL_INTERVAL_MS,
+  useMe,
+  useSellerApplication,
+  useSellerOrderStats,
+} from '@bozorcha/api-client'
 import { Badge, cn, Drawer, formatE164, Skeleton, Wordmark } from '@bozorcha/ui'
 import { ClipboardList, LayoutDashboard, Menu, Package, Store, Wallet } from 'lucide-react'
 import { useState, type ComponentType } from 'react'
@@ -21,6 +26,23 @@ const NAV: NavItem[] = [
   { to: '/orders', labelKey: 'nav.orders', icon: ClipboardList },
   { to: '/payouts', labelKey: 'nav.payouts', icon: Wallet, soon: true },
 ]
+
+/** Count of sub-orders waiting for the seller; re-read every minute. */
+function NewOrdersBadge() {
+  const { t } = useTranslation()
+  const stats = useSellerOrderStats({ refetchInterval: SELLER_STATS_POLL_INTERVAL_MS })
+  const count = stats.data?.by_status.NEW ?? 0
+  if (count === 0) return null
+  return (
+    <span
+      className="relative ml-auto grid h-6 min-w-6 place-items-center rounded-full bg-accent px-1.5 text-xs font-bold text-accent-fg tabular"
+      data-testid="nav-new-orders"
+    >
+      <span aria-hidden="true">{count > 99 ? '99+' : count}</span>
+      <span className="sr-only">, {t('orders.newBadge', { count })}</span>
+    </span>
+  )
+}
 
 const itemBase =
   'flex h-11 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors duration-150 ease-out'
@@ -57,6 +79,7 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
             >
               <Icon aria-hidden size={20} strokeWidth={1.75} />
               {t(labelKey)}
+              {to === '/orders' && <NewOrdersBadge />}
             </NavLink>
           )}
         </li>

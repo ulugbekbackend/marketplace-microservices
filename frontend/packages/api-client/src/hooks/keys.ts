@@ -1,4 +1,9 @@
-import type { OrderListParams, ProductListParams, SellerProductListParams } from '../types'
+import type {
+  OrderListParams,
+  ProductListParams,
+  SellerOrderListParams,
+  SellerProductListParams,
+} from '../types'
 
 /** Query key factory: one place to build and invalidate cache keys. */
 export const queryKeys = {
@@ -24,4 +29,9 @@ export const queryKeys = {
   sellerProductList: (params: SellerProductListParams) =>
     ['seller', 'products', 'list', params] as const,
   sellerProduct: (id: string) => ['seller', 'products', 'detail', id] as const,
+  /** Prefix of every seller order query (lists, details, stats). */
+  sellerOrders: ['seller', 'orders'] as const,
+  sellerOrderList: (params: SellerOrderListParams) => ['seller', 'orders', 'list', params] as const,
+  sellerOrder: (id: string) => ['seller', 'orders', 'detail', id] as const,
+  sellerOrderStats: ['seller', 'orders', 'stats'] as const,
 }
