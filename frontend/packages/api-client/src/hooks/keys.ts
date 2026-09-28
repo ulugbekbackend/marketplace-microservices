@@ -1,4 +1,4 @@
-import type { OrderListParams, ProductListParams } from '../types'
+import type { OrderListParams, ProductListParams, SellerProductListParams } from '../types'
 
 /** Query key factory: one place to build and invalidate cache keys. */
 export const queryKeys = {
@@ -16,4 +16,12 @@ export const queryKeys = {
   orderList: (params: OrderListParams) => ['orders', 'list', params] as const,
   order: (id: string) => ['orders', 'detail', id] as const,
   orderStatus: (id: string) => ['orders', 'status', id] as const,
+  /** The caller's latest seller application. */
+  sellerApplication: ['auth', 'seller-application'] as const,
+  attributes: ['catalog', 'attributes'] as const,
+  /** Prefix of every seller cabinet catalog query (lists and details). */
+  sellerProducts: ['seller', 'products'] as const,
+  sellerProductList: (params: SellerProductListParams) =>
+    ['seller', 'products', 'list', params] as const,
+  sellerProduct: (id: string) => ['seller', 'products', 'detail', id] as const,
 }

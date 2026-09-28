@@ -1,5 +1,26 @@
-import { useMergeCart, useSendOtp, useSession, useVerifyOtp } from '@bozorcha/api-client'
-import { Button, Card, Input, OtpInput, useToast } from '@bozorcha/ui'
+import {
+  loginErrorKey,
+  retryAfterSeconds,
+  useMergeCart,
+  useSendOtp,
+  useSession,
+  useVerifyOtp,
+  type LoginErrorKey,
+} from '@bozorcha/api-client'
+import {
+  Button,
+  Card,
+  formatE164,
+  formatMmSs,
+  formatNational,
+  Input,
+  nationalDigits,
+  OtpInput,
+  toE164,
+  useCountdown,
+  useToast,
+  UZ_COUNTRY_CODE,
+} from '@bozorcha/ui'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { CircleAlert, MessageSquareText, Smartphone } from 'lucide-react'
 import { useId, useState, type ReactNode } from 'react'
@@ -7,10 +28,7 @@ import { Controller, useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { Navigate, useNavigate, useSearchParams } from 'react-router'
 import { z } from 'zod'
-import { loginErrorKey, retryAfterSeconds, type LoginErrorKey } from '../lib/authErrors'
-import { formatE164, formatNational, nationalDigits, toE164, UZ_COUNTRY_CODE } from '../lib/phone'
 import { safeNext } from '../lib/redirect'
-import { formatMmSs, useCountdown } from '../lib/useCountdown'
 
 const RESEND_SECONDS = 60
 const CODE_LENGTH = 6

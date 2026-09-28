@@ -35,6 +35,9 @@ const baseOrder: Order = {
       seller_id: 's1',
       shop_name: 'Rishton sopol',
       sub_order_id: null,
+      cancel_reason: null,
+      tracking_number: null,
+      history: [],
       status: null,
       subtotal_tiyin: 200_000_00,
       items: [
@@ -54,6 +57,9 @@ const baseOrder: Order = {
       seller_id: 's2',
       shop_name: "Marg'ilon atlas",
       sub_order_id: null,
+      cancel_reason: null,
+      tracking_number: null,
+      history: [],
       status: null,
       subtotal_tiyin: 100_000_00,
       items: [

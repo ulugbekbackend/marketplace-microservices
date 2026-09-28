@@ -1,10 +1,14 @@
-import { ApiError, CLIENT_ERROR, type Category } from '@bozorcha/api-client'
+import {
+  ApiError,
+  CLIENT_ERROR,
+  loginErrorKey,
+  retryAfterSeconds,
+  type Category,
+} from '@bozorcha/api-client'
+import { formatE164, formatMmSs, formatNational, nationalDigits, toE164 } from '@bozorcha/ui'
 import { describe, expect, it } from 'vitest'
 import { safeNext } from './redirect'
-import { loginErrorKey, retryAfterSeconds } from './authErrors'
 import { findCategoryPath } from './categories'
-import { formatE164, formatNational, nationalDigits, toE164 } from './phone'
-import { formatMmSs } from './useCountdown'
 
 describe('phone helpers', () => {
   it('formats national numbers progressively', () => {

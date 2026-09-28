@@ -52,6 +52,13 @@ export type TokenRefreshResponse = AuthSchemas['TokenPair']
 export type LogoutRequest = AuthSchemas['RefreshRequest']
 export type UserUpdateRequest = AuthSchemas['PatchedUserUpdateRequest']
 
+export type SellerApplication = AuthSchemas['SellerApplication']
+export type SellerApplicationStatus = AuthSchemas['StatusEnum']
+export type SellerApplyRequest = AuthSchemas['SellerApplyRequest']
+
+/** Error codes of the seller application endpoints (not part of the OpenAPI schema). */
+export type SellerApplicationErrorCode = 'ALREADY_SELLER' | 'APPLICATION_PENDING' | 'NOT_FOUND'
+
 /** Error codes returned by the OTP endpoints (codes are not part of the OpenAPI schema). */
 export type AuthErrorCode =
   'OTP_INVALID' | 'OTP_EXPIRED' | 'OTP_BLOCKED' | 'OTP_RATE_LIMITED' | 'INVALID_PHONE'
@@ -72,6 +79,39 @@ export type ProductListParams = NonNullable<
 >
 
 export type Shop = CatalogSchemas['Shop']
+
+/* ---------------------------------------------------------- catalog: seller */
+
+export type ProductStatus = CatalogSchemas['ProductStatusEnum']
+export type SellerProduct = CatalogSchemas['SellerProduct']
+export type SellerProductDetail = CatalogSchemas['SellerProductDetail']
+export type SellerVariant = CatalogSchemas['SellerVariant']
+export type SellerImage = CatalogSchemas['SellerImage']
+export type ImageStatus = CatalogSchemas['ImageStatusEnum']
+export type ImageContentType = CatalogSchemas['ImageContentTypeEnum']
+export type Attribute = CatalogSchemas['Attribute']
+export type AttributeValue = CatalogSchemas['AttributeValue']
+export type SellerProductListParams = NonNullable<
+  CatalogOperations['seller_products_list']['parameters']['query']
+>
+export type ProductCreateRequest = CatalogSchemas['ProductCreateRequest']
+export type ProductUpdateRequest = CatalogSchemas['PatchedProductUpdateRequest']
+export type VariantCreateRequest = CatalogSchemas['VariantCreateRequest']
+export type VariantUpdateRequest = CatalogSchemas['PatchedVariantUpdateRequest']
+export type StockUpdateRequest = Required<CatalogSchemas['PatchedStockUpdateRequest']>
+export type PresignRequest = CatalogSchemas['PresignRequestRequest']
+export type PresignResponse = CatalogSchemas['PresignResponse']
+export type ImageAttachRequest = CatalogSchemas['ImageAttachRequest']
+
+/** Error codes of the seller catalog endpoints (not part of the OpenAPI schema). */
+export type SellerCatalogErrorCode =
+  | 'SELLER_NOT_FOUND'
+  | 'SKU_TAKEN'
+  | 'VARIANT_EXISTS'
+  | 'STOCK_BELOW_RESERVED'
+  | 'INVALID_IMAGE_KEY'
+  | 'IMAGE_EXISTS'
+  | 'VALIDATION_ERROR'
 
 /* -------------------------------------------------------------------- cart */
 

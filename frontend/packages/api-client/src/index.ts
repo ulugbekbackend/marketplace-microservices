@@ -9,7 +9,21 @@ export {
   type Query,
   type RequestOptions,
 } from './client'
-export { authEndpoints, cartEndpoints, catalogEndpoints, orderEndpoints } from './endpoints'
+export {
+  authEndpoints,
+  cartEndpoints,
+  catalogEndpoints,
+  orderEndpoints,
+  sellerCatalogEndpoints,
+} from './endpoints'
+export {
+  AUTH_ERROR_KEYS,
+  errorDetail,
+  loginErrorKey,
+  retryAfterSeconds,
+  type LoginErrorKey,
+} from './authErrors'
+export { uploadWithProgress, type UploadOptions } from './upload'
 export {
   ApiError,
   CLIENT_ERROR,
@@ -48,5 +62,18 @@ export {
   useOrderStatus,
   type CheckoutVars,
 } from './hooks/orders'
+export {
+  APPLICATION_POLL_INTERVAL_MS,
+  IMAGE_POLL_INTERVAL_MS,
+  invalidateSellerLists,
+  useApplySeller,
+  useAttributes,
+  useSellerApplication,
+  useSellerProduct,
+  useSellerProductDetails,
+  useSellerProducts,
+  useUpdateVariantStock,
+  type StockUpdateVars,
+} from './hooks/seller'
 export { ApiProvider, useApi, useSession } from './hooks/context'
 export { queryKeys } from './hooks/keys'

@@ -7,7 +7,19 @@ import {
   type Cart,
   type UnavailableItem,
 } from '@bozorcha/api-client'
-import { Button, Card, EmptyState, formatPrice, Input, Select, Skeleton } from '@bozorcha/ui'
+import {
+  Button,
+  Card,
+  EmptyState,
+  formatNational,
+  formatPrice,
+  Input,
+  nationalDigits,
+  Select,
+  Skeleton,
+  toE164,
+  UZ_COUNTRY_CODE,
+} from '@bozorcha/ui'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { CircleAlert, MapPin, ShoppingCart, Store } from 'lucide-react'
 import { useEffect, useId, useState, type ComponentProps } from 'react'
@@ -18,7 +30,6 @@ import { z } from 'zod'
 import { QueryError } from '../components/QueryError'
 import { RequireAuth } from '../components/RequireAuth'
 import { orderErrorMessage, unavailableItemsFromError } from '../lib/orderErrors'
-import { formatNational, nationalDigits, toE164, UZ_COUNTRY_CODE } from '../lib/phone'
 import { REGIONS } from '../lib/regions'
 
 const LIMITS = { full_name: 120, city: 100, street: 255, notes: 500 } as const

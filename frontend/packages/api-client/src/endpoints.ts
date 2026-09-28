@@ -1,5 +1,6 @@
 import type { ApiClient } from './client'
 import type {
+  Attribute,
   Cart,
   CartAddItemRequest,
   CartUpdateItemRequest,
@@ -7,19 +8,34 @@ import type {
   CheckoutRequest,
   CheckoutResult,
   Favorites,
+  ImageAttachRequest,
   Order,
   OrderListParams,
   OrderStatusInfo,
   OrderSummary,
   OtpVerifyResponse,
   Paginated,
+  PresignRequest,
+  PresignResponse,
+  ProductCreateRequest,
   ProductDetail,
   ProductListItem,
   ProductListParams,
+  ProductUpdateRequest,
+  SellerApplication,
+  SellerApplyRequest,
+  SellerImage,
+  SellerProduct,
+  SellerProductDetail,
+  SellerProductListParams,
+  SellerVariant,
   Shop,
+  StockUpdateRequest,
   User,
   UserUpdateRequest,
   Uuid,
+  VariantCreateRequest,
+  VariantUpdateRequest,
 } from './types'
 
 const seg = (value: string) => encodeURIComponent(value)
@@ -48,6 +64,55 @@ export function authEndpoints(client: ApiClient) {
     me: (signal?: AbortSignal) => client.get<User>('/api/auth/me/', { signal }),
 
     updateMe: (body: UserUpdateRequest) => client.patch<User>('/api/auth/me/', body),
+
+    /** The caller's latest seller application; 404 `NOT_FOUND` when there is none yet. */
+    sellerApplication: (signal?: AbortSignal) =>
+      client.get<SellerApplication>('/api/auth/seller/application/', { signal }),
+
+    /** 409 `APPLICATION_PENDING` while one waits for review, `ALREADY_SELLER` for sellers. */
+    applySeller: (body: SellerApplyRequest) =>
+      client.post<SellerApplication>('/api/auth/seller/apply/', body),
+  }
+}
+
+/** The seller cabinet side of the catalog: the caller's own products, variants and images. */
+export function sellerCatalogEndpoints(client: ApiClient) {
+  const base = '/api/catalog/seller'
+  return {
+    products: (params: SellerProductListParams = {}, signal?: AbortSignal) =>
+      client.get<Paginated<SellerProduct>>(`${base}/products/`, { query: params, signal }),
+
+    product: (productId: Uuid, signal?: AbortSignal) =>
+      client.get<SellerProductDetail>(`${base}/products/${seg(productId)}/`, { signal }),
+
+    createProduct: (body: ProductCreateRequest) =>
+      client.post<SellerProductDetail>(`${base}/products/`, body),
+
+    updateProduct: (productId: Uuid, body: ProductUpdateRequest) =>
+      client.patch<SellerProductDetail>(`${base}/products/${seg(productId)}/`, body),
+
+    /** Soft delete: the product becomes archived. */
+    archiveProduct: (productId: Uuid) => client.delete<void>(`${base}/products/${seg(productId)}/`),
+
+    createVariant: (productId: Uuid, body: VariantCreateRequest) =>
+      client.post<SellerVariant>(`${base}/products/${seg(productId)}/variants/`, body),
+
+    updateVariant: (variantId: Uuid, body: VariantUpdateRequest) =>
+      client.patch<SellerVariant>(`${base}/variants/${seg(variantId)}/`, body),
+
+    /** 409 `STOCK_BELOW_RESERVED` with `details.reserved` when orders hold more units. */
+    setStock: (variantId: Uuid, body: StockUpdateRequest) =>
+      client.patch<SellerVariant>(`${base}/variants/${seg(variantId)}/stock/`, body),
+
+    presignUpload: (body: PresignRequest) =>
+      client.post<PresignResponse>(`${base}/uploads/presign/`, body),
+
+    /** Registers an uploaded original; the image starts `processing`. */
+    attachImage: (productId: Uuid, body: ImageAttachRequest) =>
+      client.post<SellerImage>(`${base}/products/${seg(productId)}/images/`, body),
+
+    attributes: (signal?: AbortSignal) =>
+      client.get<Attribute[]>('/api/catalog/attributes/', { signal }),
   }
 }
 
