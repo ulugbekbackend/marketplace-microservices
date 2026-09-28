@@ -34,7 +34,14 @@ from messaging.outbox import PRODUCER, add_to_outbox
 from orders import clients
 from orders.clients import CartLine, NotReserved, ReserveRejected, ServiceUnavailable, VariantInfo
 from orders.models import Order, OrderItem, SubOrder
-from orders.state import InvalidTransition, can_transition, lock_order, record_created, transition
+from orders.state import (
+    InvalidTransition,
+    can_transition,
+    lock_order,
+    record_created,
+    record_sub_order_created,
+    transition,
+)
 from py_common.web.drf import ApiError
 
 logger = logging.getLogger(__name__)
@@ -125,7 +132,7 @@ def create_order(
             [_snapshot(order, variants[variant_id], qty) for variant_id, qty in wanted.items()]
         )
         record_created(order)
-        _publish(
+        publish(
             order,
             OrderCreated(
                 order_id=order.id,
@@ -227,7 +234,7 @@ def mark_paid(order_id: UUID, *, allow_expired: bool = False) -> Order:
             return order  # a concurrent call got here first
         transition(order, OrderStatus.PAID)
         sub_orders = _split_by_seller(order, items, rates)
-        _publish(
+        publish(
             order,
             OrderPaid(
                 order_id=order.id,
@@ -284,6 +291,7 @@ def _split_by_seller(
             commission_tiyin=apply_commission(subtotal, rate),
         )
         OrderItem.objects.filter(id__in=[item.id for item in lines]).update(sub_order=sub_order)
+        record_sub_order_created(sub_order)
         result.append((sub_order, lines))
     return result
 
@@ -350,12 +358,12 @@ def is_overdue(order: Order, now: datetime | None = None) -> bool:
 
 def _expire_locked(order: Order) -> None:
     transition(order, OrderStatus.EXPIRED, reason=RESERVATION_EXPIRED)
-    _publish(order, OrderExpired(order_id=order.id, items=_item_refs(order.id)))
+    publish(order, OrderExpired(order_id=order.id, items=_item_refs(order.id)))
 
 
 def _cancel_locked(order: Order, reason: str) -> None:
     transition(order, OrderStatus.CANCELLED, reason=reason)
-    _publish(order, OrderCancelled(order_id=order.id, items=_item_refs(order.id), reason=reason))
+    publish(order, OrderCancelled(order_id=order.id, items=_item_refs(order.id), reason=reason))
 
 
 # --- helpers ----------------------------------------------------------------------------
@@ -370,7 +378,8 @@ def _item_refs(order_id: UUID) -> list[OrderItemRef]:
     ]
 
 
-def _publish(order: Order, payload: Frozen) -> None:
+def publish(order: Order, payload: Frozen) -> None:
+    """Write an event about ``order`` to the outbox; call inside the change's transaction."""
     add_to_outbox(
         build_event(payload, producer=PRODUCER, correlation_id=order.id, occurred_at=timezone.now())
     )

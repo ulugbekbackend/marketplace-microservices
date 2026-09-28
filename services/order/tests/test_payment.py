@@ -73,7 +73,13 @@ def test_mock_pay_splits_the_order_per_seller(
     groups = {group["seller_id"]: group for group in body["sellers"]}
     assert groups[str(seller_a)]["sub_order_id"] == str(a.id)
     assert groups[str(seller_a)]["status"] == "NEW"
+    assert groups[str(seller_a)]["tracking_number"] == ""
+    assert groups[str(seller_a)]["cancel_reason"] == ""
+    assert [(h["from_status"], h["to_status"]) for h in groups[str(seller_a)]["history"]] == [
+        (None, "NEW")
+    ]
     assert groups[str(seller_b)]["subtotal_tiyin"] == 333_336
+    assert [(h.from_status, h.to_status) for h in b.history.all()] == [(None, "NEW")]
 
     [row] = Outbox.objects.filter(event_type=EventType.ORDER_PAID.value)
     paid = OrderPaid.model_validate(to_envelope(row).payload)

@@ -32,8 +32,8 @@ from py_common.web.drf import current_user
 TAG = "orders"
 
 
-def _errors(**descriptions: str) -> dict[int, OpenApiResponse]:
-    """OpenAPI error responses: ``_errors(e409="CART_EMPTY, ...")``."""
+def error_responses(**descriptions: str) -> dict[int, OpenApiResponse]:
+    """OpenAPI error responses: ``error_responses(e409="CART_EMPTY, ...")``."""
     return {
         int(code.removeprefix("e")): OpenApiResponse(response=ErrorSerializer, description=text)
         for code, text in descriptions.items()
@@ -58,7 +58,9 @@ def own_order(request: Request, order_id: UUID) -> Order:
 
 
 def detail_response(order_id: UUID, status_code: int = status.HTTP_200_OK) -> Response:
-    order = Order.objects.prefetch_related("items", "sub_orders", "history").get(id=order_id)
+    order = Order.objects.prefetch_related(
+        "items", "sub_orders", "sub_orders__history", "history"
+    ).get(id=order_id)
     return Response(OrderDetailSerializer(order).data, status=status_code)
 
 
@@ -77,7 +79,7 @@ class OrderListView(generics.ListAPIView[Order]):
     @extend_schema(
         tags=[TAG],
         operation_id="orders_list",
-        responses={200: OrderSummarySerializer(many=True), **_errors(**COMMON_ERRORS)},
+        responses={200: OrderSummarySerializer(many=True), **error_responses(**COMMON_ERRORS)},
     )
     def get(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         overdue = Order.objects.filter(
@@ -113,7 +115,7 @@ class CheckoutView(APIView):
         request=CheckoutSerializer,
         responses={
             202: CheckoutResultSerializer,
-            **_errors(
+            **error_responses(
                 e400="VALIDATION_ERROR, IDEMPOTENCY_KEY_REQUIRED, IDEMPOTENCY_KEY_INVALID",
                 **COMMON_ERRORS,
                 e409=(
@@ -143,7 +145,7 @@ class OrderDetailView(APIView):
     @extend_schema(
         tags=[TAG],
         operation_id="orders_retrieve",
-        responses={200: OrderDetailSerializer, **_errors(**ORDER_ERRORS)},
+        responses={200: OrderDetailSerializer, **error_responses(**ORDER_ERRORS)},
     )
     def get(self, request: Request, order_id: UUID) -> Response:
         order = own_order(request, order_id)
@@ -156,7 +158,7 @@ class OrderStatusView(APIView):
         tags=[TAG],
         operation_id="orders_status",
         summary="Order status for polling",
-        responses={200: OrderStatusSerializer, **_errors(**ORDER_ERRORS)},
+        responses={200: OrderStatusSerializer, **error_responses(**ORDER_ERRORS)},
     )
     def get(self, request: Request, order_id: UUID) -> Response:
         order = own_order(request, order_id)
@@ -171,7 +173,7 @@ class OrderCancelView(APIView):
         request=None,
         responses={
             200: OrderDetailSerializer,
-            **_errors(**ORDER_ERRORS, e409="INVALID_TRANSITION: only PENDING or RESERVED"),
+            **error_responses(**ORDER_ERRORS, e409="INVALID_TRANSITION: only PENDING or RESERVED"),
         },
     )
     def post(self, request: Request, order_id: UUID) -> Response:
@@ -189,7 +191,7 @@ class MockPayView(APIView):
         request=None,
         responses={
             200: OrderDetailSerializer,
-            **_errors(
+            **error_responses(
                 **ORDER_ERRORS,
                 e409="INVALID_TRANSITION, ORDER_EXPIRED, NOT_RESERVED",
                 e503="SERVICE_UNAVAILABLE: catalog did not answer",

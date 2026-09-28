@@ -62,11 +62,19 @@ class SubOrder(models.Model):
         max_digits=5, decimal_places=4, default=Decimal("0")
     )
     commission_tiyin = models.BigIntegerField(default=0)
+    tracking_number = models.CharField(max_length=64, blank=True, default="")
+    cancel_reason = models.CharField(max_length=255, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ("created_at", "id")
-        indexes = (models.Index(fields=["seller_id", "-created_at"], name="suborder_seller_idx"),)
+        indexes = (
+            models.Index(fields=["seller_id", "-created_at"], name="suborder_seller_idx"),
+            models.Index(
+                fields=["seller_id", "status", "-created_at"], name="suborder_seller_status_idx"
+            ),
+        )
         constraints = (
             models.UniqueConstraint(fields=["order", "seller_id"], name="suborder_order_seller"),
             models.CheckConstraint(
@@ -81,6 +89,11 @@ class SubOrder(models.Model):
 
     def __str__(self) -> str:
         return f"{self.id} {self.status}"
+
+    @property
+    def net_tiyin(self) -> int:
+        """What the seller keeps: the subtotal minus the marketplace commission."""
+        return self.subtotal_tiyin - self.commission_tiyin
 
 
 class OrderItem(models.Model):
@@ -133,6 +146,26 @@ class OrderStatusHistory(models.Model):
     class Meta:
         ordering = ("created_at", "id")
         verbose_name_plural = "order status history"
+
+    def __str__(self) -> str:
+        return f"{self.from_status} -> {self.to_status}"
+
+
+class SubOrderStatusHistory(models.Model):
+    """Every sub-order status change, oldest first. ``from_status`` is empty for creation."""
+
+    id = models.BigAutoField(primary_key=True)
+    sub_order = models.ForeignKey(SubOrder, on_delete=models.CASCADE, related_name="history")
+    from_status = models.CharField(
+        max_length=24, choices=SUB_ORDER_STATUS_CHOICES, null=True, blank=True
+    )
+    to_status = models.CharField(max_length=24, choices=SUB_ORDER_STATUS_CHOICES)
+    reason = models.CharField(max_length=255, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("created_at", "id")
+        verbose_name_plural = "sub-order status history"
 
     def __str__(self) -> str:
         return f"{self.from_status} -> {self.to_status}"

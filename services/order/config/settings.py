@@ -71,6 +71,7 @@ SPECTACULAR_SETTINGS: dict[str, object] = {
     "ENUM_NAME_OVERRIDES": {
         "OrderStatusEnum": "orders.models.ORDER_STATUS_CHOICES",
         "SubOrderStatusEnum": "orders.models.SUB_ORDER_STATUS_CHOICES",
+        "SubOrderTargetStatusEnum": "orders.serializers.SELLER_TARGETS",
     },
 }
 
