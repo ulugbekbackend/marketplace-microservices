@@ -13,15 +13,32 @@ export const orderNumber = (id: string) => `#${id.slice(0, 8).toUpperCase()}`
 /** The customer can still cancel. */
 export const isCancellable = (status: OrderStatus) => status === 'PENDING' || status === 'RESERVED'
 
-export const CANCEL_REASONS = [
+/** Reasons of status changes the customer is told about (cancel reasons and payment ones). */
+export const ORDER_REASONS = [
   'OUT_OF_STOCK',
   'RESERVATION_FAILED',
   'CANCELLED_BY_CUSTOMER',
   'RESERVATION_EXPIRED',
+  'LATE_PAYMENT',
+  'LATE_PAYMENT_OUT_OF_STOCK',
+  'PAYMENT_REFUNDED',
 ] as const
 
-export type CancelReason = (typeof CANCEL_REASONS)[number]
+export type OrderReason = (typeof ORDER_REASONS)[number]
 
-/** Known cancel reasons only; anything else is not shown to the customer. */
-export const knownReason = (reason: string | null | undefined): CancelReason | null =>
-  CANCEL_REASONS.find((r) => r === reason) ?? null
+/** Known reasons only; anything else is not shown to the customer. */
+export const knownReason = (reason: string | null | undefined): OrderReason | null =>
+  ORDER_REASONS.find((r) => r === reason) ?? null
+
+/** The reason of the latest move into `status`, if the customer is told about it. */
+export function lastReasonFor(
+  history: readonly { to_status: OrderStatus; reason: string }[],
+  status: OrderStatus,
+): OrderReason | null {
+  const entry = [...history].reverse().find((h) => h.to_status === status)
+  return knownReason(entry?.reason)
+}
+
+/** Paid after the deadline: the order waits for a second reservation (then PAID or REFUNDED). */
+export const awaitsLateReservation = (order: { status: OrderStatus; late_payment?: boolean }) =>
+  order.status === 'EXPIRED' && order.late_payment === true

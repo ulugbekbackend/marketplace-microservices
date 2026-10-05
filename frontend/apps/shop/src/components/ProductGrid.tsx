@@ -1,4 +1,4 @@
-import type { ProductListItem } from '@bozorcha/api-client'
+import type { SearchItem } from '@bozorcha/api-client'
 import { cn, ProductCard, ProductCardSkeleton } from '@bozorcha/ui'
 import { useTranslation } from 'react-i18next'
 import { RouterLink } from './RouterLink'
@@ -9,7 +9,7 @@ const layouts = {
 } as const
 
 type ProductGridProps = {
-  items?: ProductListItem[]
+  items?: SearchItem[]
   loading?: boolean
   skeletonCount?: number
   layout?: keyof typeof layouts
@@ -47,10 +47,10 @@ export function ProductGrid({
             className="w-full"
             href={`/p/${product.slug}`}
             title={product.title}
-            imageUrl={product.image_url}
-            minPrice={product.min_price_tiyin}
-            maxPrice={product.max_price_tiyin}
-            sellerName={hideSeller ? undefined : product.seller.shop_name}
+            imageUrl={product.image_url ?? null}
+            minPrice={product.min_price}
+            maxPrice={product.max_price}
+            sellerName={hideSeller ? undefined : product.shop_name}
             inStock={product.in_stock}
             labels={{
               outOfStock: t('product.outOfStock'),

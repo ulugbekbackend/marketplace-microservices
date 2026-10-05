@@ -1,8 +1,9 @@
-import { useCategories, useProducts, type Category } from '@bozorcha/api-client'
+import { useCategories, useSearch, type Category } from '@bozorcha/api-client'
 import { EmptyState, Skeleton } from '@bozorcha/ui'
 import { ChevronRight, PackageOpen } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
+import { SearchError } from '../components/catalog/SearchError'
 import { ProductGrid } from '../components/ProductGrid'
 import { QueryError } from '../components/QueryError'
 import { CategoryIcon } from '../lib/categoryIcon'
@@ -93,7 +94,8 @@ function CategoryTile({ category }: { category: Category }) {
 
 function LatestProducts() {
   const { t } = useTranslation()
-  const { data, isPending, isError, error, refetch, isRefetching } = useProducts({
+  const { data, isPending, isError, error, refetch, isRefetching } = useSearch({
+    sort: 'newest',
     page: 1,
     page_size: LATEST_COUNT,
   })
@@ -115,7 +117,7 @@ function LatestProducts() {
       {isPending ? (
         <ProductGrid loading layout="wide" skeletonCount={LATEST_COUNT} />
       ) : isError ? (
-        <QueryError error={error} onRetry={() => void refetch()} retrying={isRefetching} />
+        <SearchError error={error} onRetry={() => void refetch()} retrying={isRefetching} />
       ) : data.items.length === 0 ? (
         <EmptyState
           icon={<PackageOpen size={22} strokeWidth={1.75} />}

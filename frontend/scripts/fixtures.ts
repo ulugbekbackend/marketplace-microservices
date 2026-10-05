@@ -112,6 +112,63 @@ export const products = [
   seller: seller as (typeof sellers)['atlas'],
 }))
 
+/** The products as search hits (`GET /api/search` items). */
+export const searchItems = products.map((p, i) => ({
+  id: p.id,
+  slug: p.slug,
+  title: p.title,
+  seller_id: p.seller.id,
+  shop_name: p.seller.shop_name,
+  min_price: p.min_price_tiyin,
+  max_price: p.max_price_tiyin,
+  in_stock: p.in_stock,
+  image_url: p.image_url,
+  rating: i % 3 === 0 ? 4.8 : 0,
+}))
+
+/** Facets as the search service returns them (counts are illustrative). */
+export function searchFacets(selectedColors: string[] = []) {
+  const value = (v: string, count: number) => ({
+    value: v,
+    count,
+    selected: selectedColors.includes(v),
+  })
+  return {
+    categories: [
+      { id: 'c-kiyim', name: 'Kiyim va poyabzal', count: 64 },
+      { id: 'c-ayollar', name: 'Ayollar kiyimi', count: 31 },
+      { id: 'c-erkaklar', name: 'Erkaklar kiyimi', count: 21 },
+      { id: 'c-poyabzal', name: 'Poyabzal', count: 12 },
+      { id: 'c-uy', name: "Uy-ro'zg'or", count: 40 },
+      { id: 'c-tekstil', name: 'Uy tekstili', count: 18 },
+      { id: 'c-elektronika', name: 'Elektronika', count: 52 },
+      { id: 'c-bolalar', name: 'Bolalar uchun', count: 16 },
+    ],
+    price_ranges: [
+      { key: 'lt_100k', from_tiyin: null, to_tiyin: so(100_000), count: 9 },
+      { key: '100k_500k', from_tiyin: so(100_000), to_tiyin: so(500_000), count: 61 },
+      { key: '500k_1m', from_tiyin: so(500_000), to_tiyin: so(1_000_000), count: 26 },
+      { key: '1m_5m', from_tiyin: so(1_000_000), to_tiyin: so(5_000_000), count: 14 },
+      { key: 'gte_5m', from_tiyin: so(5_000_000), to_tiyin: null, count: 0 },
+    ],
+    attributes: [
+      {
+        code: 'color',
+        values: [
+          value('qizil', 18),
+          value("ko'k", 15),
+          value('oq', 12),
+          value('qora', 9),
+          value('yashil', 6),
+          value('kulrang', 4),
+          value('sariq', 2),
+        ],
+      },
+      { code: 'size', values: [value('S', 20), value('M', 24), value('L', 17), value('XL', 8)] },
+    ],
+  }
+}
+
 const variant = (
   id: string,
   sku: string,
@@ -273,6 +330,7 @@ export function reservedOrder(minutesLeft = 11.5) {
     id: ORDER_ID,
     status: 'RESERVED',
     reserved_until: at(minutesLeft * 60_000),
+    late_payment: false,
     total_tiyin: cleanCart.total_tiyin,
     cancel_reason: '',
     created_at: at(-3.5 * 60_000),

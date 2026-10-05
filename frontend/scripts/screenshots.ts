@@ -21,9 +21,10 @@ import {
   ORDER_ID,
   orderList,
   productDetail,
-  products,
   productSvg,
   reservedOrder,
+  searchFacets,
+  searchItems,
   shop,
 } from './fixtures'
 
@@ -37,11 +38,51 @@ type Shot = {
   /** Start with a stored session (the mocked refresh endpoint signs the customer in). */
   signedIn?: boolean
   prepare?: (page: Page) => Promise<void>
+  /** Console errors the shot causes on purpose (e.g. the browser logging a mocked 503). */
+  expectedConsole?: RegExp
 }
 
 const SHOTS: Shot[] = [
   { name: 'home', path: '/' },
   { name: 'catalog', path: '/catalog/kiyim' },
+  {
+    name: 'search',
+    path: "/catalog?q=ko'ylak&attr%5Bcolor%5D=qizil&price_min=10000000&price_max=49999999",
+  },
+  {
+    name: 'catalog-filters',
+    path: '/catalog/kiyim?attr%5Bcolor%5D=qizil&attr%5Bsize%5D=M',
+    // The filters live in a drawer below 1024px.
+    prepare: async (page) => {
+      const button = page.getByRole('button', { name: /^Filtrlar( \(\d+\))?$/ })
+      if (await button.isVisible()) {
+        await button.click()
+        await page.getByRole('dialog', { name: 'Filtrlar' }).waitFor()
+      }
+    },
+  },
+  { name: 'search-empty', path: '/catalog?q=velosiped' },
+  {
+    name: 'search-unavailable',
+    path: '/catalog?q=down',
+    expectedConsole: /status of 503/,
+    // 5xx answers are retried with backoff before the error state shows.
+    prepare: async (page) => {
+      await page.getByRole('alert').waitFor({ timeout: 15_000 })
+    },
+  },
+  {
+    name: 'autocomplete',
+    path: '/',
+    prepare: async (page) => {
+      const input = page.locator('input[role="combobox"]:visible')
+      await input.click()
+      await input.pressSequentially('atl')
+      await page.locator('[role="listbox"]:visible').waitFor()
+      await page.keyboard.press('ArrowDown')
+      await page.keyboard.press('ArrowDown')
+    },
+  },
   { name: 'product', path: '/p/atlas-koylak' },
   { name: 'shop', path: '/shop/margilon-atlas' },
   { name: 'cart', path: '/cart' },
@@ -105,6 +146,40 @@ async function mockApi(page: Page) {
       return json(route, 200, { status, reserved_until })
     }
     if (path === '/api/catalog/categories/') return json(route, 200, categories)
+    if (path === '/api/search/suggest') {
+      const q = (url.searchParams.get('q') ?? '').toLowerCase()
+      const items = q.length < 2 ? [] : searchItems.filter((p) => p.title.toLowerCase().includes(q))
+      return json(route, 200, {
+        items: items.slice(0, 8).map(({ id, slug, title }) => ({ id, slug, title })),
+      })
+    }
+    if (path === '/api/search') {
+      const q = (url.searchParams.get('q') ?? '').toLowerCase()
+      if (q === 'down') {
+        return json(route, 503, {
+          error: { code: 'SEARCH_UNAVAILABLE', message: 'Search is unavailable', details: null },
+        })
+      }
+      const page = Number(url.searchParams.get('page') ?? 1)
+      const pageSize = Number(url.searchParams.get('page_size') ?? 24)
+      const seller = url.searchParams.get('seller')
+      let items = searchItems.filter(
+        (p) => (!seller || p.seller_id === seller) && (!q || p.title.toLowerCase().includes(q)),
+      )
+      if (url.searchParams.get('in_stock') === 'true') items = items.filter((p) => p.in_stock)
+      const sort = url.searchParams.get('sort')
+      if (sort === 'price_asc') items = [...items].sort((a, b) => a.min_price - b.min_price)
+      if (sort === 'price_desc') items = [...items].sort((a, b) => b.min_price - a.min_price)
+      // Pretend there is a longer catalog so pagination is visible.
+      const total = q ? items.length : seller ? 48 : 186
+      return json(route, 200, {
+        items: items.slice(0, pageSize),
+        total,
+        page,
+        page_size: pageSize,
+        facets: searchFacets(url.searchParams.getAll('attr[color]')),
+      })
+    }
     if (method === 'GET' && path === '/api/cart/') {
       // "?empty" on the page URL shows the empty cart.
       const search = new URL(page.url()).search
@@ -125,19 +200,6 @@ async function mockApi(page: Page) {
             }
           : cart,
       )
-    }
-    if (path === '/api/catalog/products/') {
-      const page = Number(url.searchParams.get('page') ?? 1)
-      const pageSize = Number(url.searchParams.get('page_size') ?? 24)
-      const seller = url.searchParams.get('seller')
-      const items = seller ? products.filter((p) => p.seller.slug === seller) : products
-      // Pretend there is a longer catalog so pagination is visible.
-      return json(route, 200, {
-        items: items.slice(0, pageSize),
-        total: seller ? 48 : 186,
-        page,
-        page_size: pageSize,
-      })
     }
     if (path === `/api/catalog/products/${productDetail.slug}/`)
       return json(route, 200, productDetail)
@@ -259,7 +321,9 @@ async function main() {
           )
           const problems = await checkLayout(page)
           if (isDark !== (theme === 'dark')) problems.push(`theme class mismatch (dark=${isDark})`)
-          problems.push(...errors.map((e) => `console: ${e}`))
+          problems.push(
+            ...errors.filter((e) => !shot.expectedConsole?.test(e)).map((e) => `console: ${e}`),
+          )
 
           const file = resolve(outDir, `${shot.name}-${width}-${theme}.png`)
           await page.screenshot({ path: file, fullPage: true })

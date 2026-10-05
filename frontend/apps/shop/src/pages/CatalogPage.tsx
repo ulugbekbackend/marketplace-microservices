@@ -1,94 +1,89 @@
-import { useCategories, useProducts, type ProductListItem } from '@bozorcha/api-client'
+import { useCategories, useSearch, type SearchSort } from '@bozorcha/api-client'
 import { Button, Drawer, EmptyState, Pagination, Skeleton } from '@bozorcha/ui'
-import { ListTree, PackageOpen, SearchX, X } from 'lucide-react'
+import { ChevronDown, PackageOpen, SearchX, SlidersHorizontal, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link, useParams, useSearchParams } from 'react-router'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { Breadcrumbs } from '../components/Breadcrumbs'
-import { CategoryTree, CategoryTreeSkeleton } from '../components/CategoryTree'
+import { FilterPanel } from '../components/catalog/FilterPanel'
+import { SearchError } from '../components/catalog/SearchError'
 import { ProductGrid } from '../components/ProductGrid'
 import { QueryError } from '../components/QueryError'
 import { RouterLink } from '../components/RouterLink'
 import { findCategoryPath } from '../lib/categories'
+import {
+  activeFilterCount,
+  catalogHref,
+  clearFilters,
+  effectiveSort,
+  hasFilters,
+  parseCatalogParams,
+  SORTS,
+  toggleAttr,
+  toSearchParams,
+  withFilters,
+  type CatalogFilters,
+} from '../lib/catalogFilters'
+import { attributeLabel, priceRangeLabel, valueLabel } from '../lib/searchLabels'
 import { NotFoundPage } from './NotFoundPage'
 
-export const CATALOG_PAGE_SIZE = 24
-
-const parsePage = (value: string | null) => {
-  const page = Number.parseInt(value ?? '', 10)
-  return Number.isFinite(page) && page > 0 ? page : 1
-}
-
-/** Client-side match until the search service exposes a query endpoint. */
-const matchesQuery = (product: ProductListItem, q: string) => {
-  const needle = q.toLocaleLowerCase('uz')
-  return (
-    product.title.toLocaleLowerCase('uz').includes(needle) ||
-    product.seller.shop_name.toLocaleLowerCase('uz').includes(needle)
-  )
-}
-
+/**
+ * Listing and search results in one page: `/catalog[/<category slug>]?q=&...`. Results,
+ * facets and counts come from the search service; the category tree (names, slugs, ids) from
+ * the catalog. Every filter lives in the URL (see `lib/catalogFilters`).
+ */
 export function CatalogPage() {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const { categorySlug } = useParams()
   const [searchParams] = useSearchParams()
-  const page = parsePage(searchParams.get('page'))
-  const q = searchParams.get('q')?.trim() ?? ''
+  const filters = useMemo(() => parseCatalogParams(searchParams), [searchParams])
   const [drawerOpen, setDrawerOpen] = useState(false)
 
   const categories = useCategories()
-  const products = useProducts({ category: categorySlug, page, page_size: CATALOG_PAGE_SIZE })
-
   const path = useMemo(
     () => (categorySlug && categories.data ? findCategoryPath(categories.data, categorySlug) : []),
     [categories.data, categorySlug],
   )
   const current = path[path.length - 1]
-  const heading = current?.name ?? t('catalog.allProducts')
-
-  const visibleItems = useMemo(
-    () =>
-      q
-        ? (products.data?.items ?? []).filter((item) => matchesQuery(item, q))
-        : products.data?.items,
-    [products.data, q],
-  )
+  // The search filters by category id: wait for the tree when the URL names a category.
+  const categoryReady = !categorySlug || Boolean(current)
+  const search = useSearch(toSearchParams(filters, current?.id), { enabled: categoryReady })
 
   if (categorySlug && categories.isSuccess && path.length === 0) {
     return <NotFoundPage title={t('catalog.notFound')} />
   }
 
-  const hrefFor = (target: number) => {
-    const next = new URLSearchParams(searchParams)
-    if (target > 1) next.set('page', String(target))
-    else next.delete('page')
-    const query = next.toString()
-    return `/catalog${categorySlug ? `/${categorySlug}` : ''}${query ? `?${query}` : ''}`
-  }
-  const clearSearchHref = (() => {
-    const next = new URLSearchParams(searchParams)
-    next.delete('q')
-    const query = next.toString()
-    return `/catalog${categorySlug ? `/${categorySlug}` : ''}${query ? `?${query}` : ''}`
-  })()
+  const setFilters = (next: CatalogFilters) => navigate(catalogHref(categorySlug, next))
+  // A different category keeps the query, price and stock filters; attributes belong to a
+  // category (shoe sizes mean nothing for phones), so they are dropped.
+  const categoryHref = (slug: string | undefined) =>
+    catalogHref(slug, withFilters(filters, { attrs: {} }))
 
-  const pageCount = products.data ? Math.ceil(products.data.total / products.data.page_size) : 0
-  const activePath = path.map((category) => category.slug)
+  const heading = filters.q
+    ? t('catalog.searchTitle', { q: filters.q })
+    : (current?.name ?? t('catalog.allProducts'))
+  const data = search.data
+  const pageCount = data ? Math.ceil(data.total / data.page_size) : 0
+  const filterCount = activeFilterCount(filters)
+  const loadingFirst = !categoryReady || search.isPending
 
-  const tree = categories.isPending ? (
-    <CategoryTreeSkeleton />
-  ) : categories.isError ? (
+  const panel = categories.isError ? (
     <QueryError
       error={categories.error}
       onRetry={() => void categories.refetch()}
       retrying={categories.isRefetching}
       className="px-3 py-6"
     />
-  ) : (
-    <CategoryTree
-      categories={categories.data}
-      activeSlug={categorySlug}
-      activePath={activePath}
+  ) : search.isError && !data ? null : (
+    // No facets without results: the error state in the list says what happened.
+    <FilterPanel
+      facets={categories.data ? data?.facets : undefined}
+      filters={filters}
+      onChange={setFilters}
+      categories={categories.data ?? []}
+      path={path}
+      categoryHref={categoryHref}
       onNavigate={() => setDrawerOpen(false)}
     />
   )
@@ -98,7 +93,7 @@ export function CatalogPage() {
       <title>{`${heading} | ${t('common.brand')}`}</title>
       <Breadcrumbs
         items={
-          categorySlug
+          categorySlug || filters.q
             ? [
                 { label: t('catalog.title'), href: '/catalog' },
                 ...path.map((c) => ({ label: c.name, href: `/catalog/${c.slug}` })),
@@ -107,102 +102,84 @@ export function CatalogPage() {
         }
       />
 
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="flex min-w-0 flex-col gap-1">
-          {categorySlug && categories.isPending ? (
-            <Skeleton className="h-9 w-48" />
-          ) : (
-            <h1 className="font-heading text-2xl font-extrabold tracking-tight text-text [overflow-wrap:anywhere] sm:text-3xl">
-              {heading}
-            </h1>
-          )}
-          {products.data && !q && (
-            <p className="text-sm text-text-muted tabular">
-              {t('common.productsCount', { count: products.data.total })}
-            </p>
-          )}
-        </div>
-        <Button
-          variant="secondary"
-          className="lg:hidden"
-          onClick={() => setDrawerOpen(true)}
-          leadingIcon={<ListTree aria-hidden="true" size={18} strokeWidth={1.75} />}
-        >
-          {t('catalog.showCategories')}
-        </Button>
+      <div className="flex min-w-0 flex-col gap-1">
+        {categorySlug && !filters.q && categories.isPending ? (
+          <Skeleton className="h-9 w-48" />
+        ) : (
+          <h1 className="font-heading text-2xl font-extrabold tracking-tight text-text [overflow-wrap:anywhere] sm:text-3xl">
+            {heading}
+          </h1>
+        )}
+        {data ? (
+          <p className="text-sm text-text-muted tabular" aria-live="polite">
+            {t('common.productsCount', { count: data.total })}
+          </p>
+        ) : search.isError ? null : (
+          <Skeleton className="h-5 w-28" />
+        )}
       </div>
 
-      {q && (
-        <div className="flex flex-col gap-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex h-9 max-w-full items-center gap-1 rounded-full bg-primary-soft pr-1 pl-3 text-sm font-medium text-primary">
-              <span className="truncate">{t('catalog.searchFor', { q })}</span>
-              <Link
-                to={clearSearchHref}
-                aria-label={t('catalog.clearSearch')}
-                className="grid size-7 shrink-0 place-items-center rounded-full hover:bg-surface focus-ring"
-              >
-                <X aria-hidden="true" size={16} strokeWidth={1.75} />
-              </Link>
-            </span>
-          </div>
-          <p className="text-sm text-text-muted">{t('catalog.searchScopeNote')}</p>
-        </div>
-      )}
-
       <div className="lg:grid lg:grid-cols-[15rem_minmax(0,1fr)] lg:gap-8">
-        <aside className="hidden lg:block">
-          <div className="sticky top-36">{tree}</div>
+        <aside className="hidden lg:block" aria-label={t('catalog.filters')}>
+          <div className="sticky top-36 max-h-[calc(100dvh-10rem)] overflow-y-auto pr-1 pb-6">
+            {panel}
+          </div>
         </aside>
 
-        <div className="flex min-w-0 flex-col gap-6">
-          {products.isPending ? (
-            <ProductGrid loading skeletonCount={12} />
-          ) : products.isError ? (
-            <QueryError
-              error={products.error}
-              onRetry={() => void products.refetch()}
-              retrying={products.isRefetching}
+        <div className="flex min-w-0 flex-col gap-4">
+          <div className="flex items-center justify-between gap-3">
+            <Button
+              variant="secondary"
+              className="lg:hidden"
+              onClick={() => setDrawerOpen(true)}
+              leadingIcon={<SlidersHorizontal aria-hidden="true" size={18} strokeWidth={1.75} />}
+            >
+              {filterCount > 0
+                ? t('catalog.filtersWithCount', { count: filterCount })
+                : t('catalog.filters')}
+            </Button>
+            <SortSelect
+              value={effectiveSort(filters)}
+              withRelevance={Boolean(filters.q)}
+              onChange={(sort) => setFilters(withFilters(filters, { sort }))}
             />
-          ) : !visibleItems || visibleItems.length === 0 ? (
-            q ? (
-              <EmptyState
-                icon={<SearchX size={22} strokeWidth={1.75} />}
-                title={t('catalog.searchEmpty', { q })}
-                description={t('catalog.searchEmptyHint')}
-                action={
-                  <Link
-                    to={clearSearchHref}
-                    className="inline-flex h-11 items-center rounded-lg border border-border bg-surface px-4 text-sm font-semibold text-text hover:bg-surface-2 focus-ring"
-                  >
-                    {t('catalog.clearSearch')}
-                  </Link>
-                }
-              />
-            ) : (
-              <EmptyState
-                icon={<PackageOpen size={22} strokeWidth={1.75} />}
-                title={t('catalog.empty')}
-                description={t('catalog.emptyHint')}
-              />
-            )
+          </div>
+
+          <ActiveFilters
+            filters={filters}
+            onChange={setFilters}
+            clearSearchHref={catalogHref(categorySlug, withFilters(filters, { q: '' }))}
+          />
+
+          {loadingFirst && !search.isError ? (
+            <ProductGrid loading skeletonCount={12} />
+          ) : search.isError ? (
+            <SearchError
+              error={search.error}
+              onRetry={() => void search.refetch()}
+              retrying={search.isRefetching}
+            />
+          ) : !data || data.items.length === 0 ? (
+            <NoResults
+              filters={filters}
+              onClearFilters={() => setFilters(clearFilters(filters))}
+              clearSearchHref={catalogHref(categorySlug, withFilters(filters, { q: '' }))}
+            />
           ) : (
             <div
               className={
-                products.isPlaceholderData
-                  ? 'opacity-60 transition-opacity duration-150'
-                  : undefined
+                search.isPlaceholderData ? 'opacity-60 transition-opacity duration-150' : undefined
               }
-              aria-busy={products.isPlaceholderData || undefined}
+              aria-busy={search.isPlaceholderData || undefined}
             >
-              <ProductGrid items={visibleItems} />
+              <ProductGrid items={data.items} />
             </div>
           )}
 
           <Pagination
-            page={page}
+            page={filters.page}
             pageCount={pageCount}
-            hrefFor={hrefFor}
+            hrefFor={(page) => catalogHref(categorySlug, { ...filters, page })}
             linkAs={RouterLink}
             labels={{
               nav: t('catalog.pagination'),
@@ -217,12 +194,194 @@ export function CatalogPage() {
       <Drawer
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
-        title={t('catalog.categories')}
+        title={t('catalog.filters')}
         closeLabel={t('common.close')}
         side="left"
+        footer={
+          <Button className="w-full" onClick={() => setDrawerOpen(false)}>
+            {t('catalog.showResults', { count: data?.total ?? 0 })}
+          </Button>
+        }
       >
-        {tree}
+        {panel}
       </Drawer>
     </div>
+  )
+}
+
+function SortSelect({
+  value,
+  withRelevance,
+  onChange,
+}: {
+  value: SearchSort
+  withRelevance: boolean
+  onChange: (sort: SearchSort) => void
+}) {
+  const { t } = useTranslation()
+  const options = SORTS.filter((sort) => withRelevance || sort !== 'relevance')
+  return (
+    <label className="ml-auto flex min-w-0 items-center gap-2 text-sm text-text-muted">
+      <span className="hidden sm:inline">{t('catalog.sort')}</span>
+      <span className="relative min-w-0">
+        <select
+          value={value}
+          aria-label={t('catalog.sort')}
+          onChange={(event) => onChange(event.target.value as SearchSort)}
+          className="h-11 w-full max-w-48 min-w-0 cursor-pointer appearance-none truncate rounded-lg border border-border bg-surface pr-9 pl-3 text-sm font-medium text-text transition-colors duration-150 ease-out hover:border-border-strong focus-ring"
+        >
+          {options.map((sort) => (
+            <option key={sort} value={sort}>
+              {t(`catalog.sorts.${sort}`)}
+            </option>
+          ))}
+        </select>
+        <ChevronDown
+          aria-hidden="true"
+          size={18}
+          strokeWidth={1.75}
+          className="pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 text-text-muted"
+        />
+      </span>
+    </label>
+  )
+}
+
+type Chip = { key: string; label: string; next: CatalogFilters }
+
+function ActiveFilters({
+  filters,
+  onChange,
+  clearSearchHref,
+}: {
+  filters: CatalogFilters
+  onChange: (next: CatalogFilters) => void
+  clearSearchHref: string
+}) {
+  const { t } = useTranslation()
+  const chips: Chip[] = []
+  if (filters.priceMin !== null || filters.priceMax !== null) {
+    chips.push({
+      key: 'price',
+      label: priceRangeLabel(t, filters.priceMin, filters.priceMax),
+      next: withFilters(filters, { priceMin: null, priceMax: null }),
+    })
+  }
+  if (filters.inStock) {
+    chips.push({
+      key: 'stock',
+      label: t('catalog.inStockOnly'),
+      next: withFilters(filters, { inStock: false }),
+    })
+  }
+  for (const [code, values] of Object.entries(filters.attrs)) {
+    for (const value of values) {
+      chips.push({
+        key: `${code}:${value}`,
+        label: `${attributeLabel(t, code)}: ${valueLabel(value)}`,
+        next: toggleAttr(filters, code, value),
+      })
+    }
+  }
+  if (!filters.q && chips.length === 0) return null
+
+  const chipClass =
+    'inline-flex h-9 max-w-full items-center gap-1 rounded-full bg-primary-soft pr-1 pl-3 text-sm font-medium text-primary'
+  const removeClass =
+    'grid size-7 shrink-0 place-items-center rounded-full hover:bg-surface focus-ring'
+
+  return (
+    <ul aria-label={t('catalog.activeFilters')} className="flex flex-wrap items-center gap-2">
+      {filters.q && (
+        <li className="max-w-full">
+          <span className={chipClass}>
+            <span className="truncate">{t('catalog.searchFor', { q: filters.q })}</span>
+            <Link
+              to={clearSearchHref}
+              aria-label={t('catalog.clearSearch')}
+              className={removeClass}
+            >
+              <X aria-hidden="true" size={16} strokeWidth={1.75} />
+            </Link>
+          </span>
+        </li>
+      )}
+      {chips.map((chip) => (
+        <li key={chip.key} className="max-w-full">
+          <span className={chipClass}>
+            <span className="truncate">{chip.label}</span>
+            <button
+              type="button"
+              aria-label={t('catalog.removeFilter', { label: chip.label })}
+              onClick={() => onChange(chip.next)}
+              className={removeClass}
+            >
+              <X aria-hidden="true" size={16} strokeWidth={1.75} />
+            </button>
+          </span>
+        </li>
+      ))}
+      {chips.length > 1 && (
+        <li>
+          <button
+            type="button"
+            onClick={() => onChange(clearFilters(filters))}
+            className="h-9 rounded-full px-3 text-sm font-semibold text-text-muted hover:bg-surface-2 hover:text-text focus-ring"
+          >
+            {t('catalog.clearFilters')}
+          </button>
+        </li>
+      )}
+    </ul>
+  )
+}
+
+function NoResults({
+  filters,
+  onClearFilters,
+  clearSearchHref,
+}: {
+  filters: CatalogFilters
+  onClearFilters: () => void
+  clearSearchHref: string
+}) {
+  const { t } = useTranslation()
+  if (hasFilters(filters)) {
+    return (
+      <EmptyState
+        icon={<SearchX size={22} strokeWidth={1.75} />}
+        title={t('catalog.filteredEmpty')}
+        description={t('catalog.filteredEmptyHint')}
+        action={
+          <Button variant="secondary" onClick={onClearFilters}>
+            {t('catalog.clearFilters')}
+          </Button>
+        }
+      />
+    )
+  }
+  if (filters.q) {
+    return (
+      <EmptyState
+        icon={<SearchX size={22} strokeWidth={1.75} />}
+        title={t('catalog.searchEmpty', { q: filters.q })}
+        description={t('catalog.searchEmptyHint')}
+        action={
+          <Link
+            to={clearSearchHref}
+            className="inline-flex h-11 items-center rounded-lg border border-border bg-surface px-4 text-sm font-semibold text-text hover:bg-surface-2 focus-ring"
+          >
+            {t('catalog.clearSearch')}
+          </Link>
+        }
+      />
+    )
+  }
+  return (
+    <EmptyState
+      icon={<PackageOpen size={22} strokeWidth={1.75} />}
+      title={t('catalog.empty')}
+      description={t('catalog.emptyHint')}
+    />
   )
 }
