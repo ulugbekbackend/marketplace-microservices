@@ -29,6 +29,6 @@ class Command(BaseCommand):
             return relay_batch(publisher, limit=limit)
 
         try:
-            run_relay(batch, stop_on_signals(), interval=options["interval"])
+            run_relay(batch, stop_on_signals(), interval=options["interval"], idle=publisher.idle)
         finally:
             publisher.close()

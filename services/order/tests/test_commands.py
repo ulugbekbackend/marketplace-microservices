@@ -49,6 +49,9 @@ class FakePublisher:
         if len(self.sent) >= self.expected:
             self.stop.set()
 
+    def idle(self, seconds: float) -> None:
+        self.stop.wait(seconds)
+
     def close(self) -> None:
         self.closed = True
 

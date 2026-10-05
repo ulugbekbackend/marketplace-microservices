@@ -8,6 +8,7 @@ Both share the failure policy below, which is where the behaviour lives.
 import logging
 import signal
 import threading
+import time
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -149,16 +150,43 @@ class PikaPublisher:
         return self._channel
 
     def publish(self, envelope: EventEnvelope) -> None:
+        reused = self._channel is not None and self._channel.is_open
         try:
-            self._ensure_channel().basic_publish(
-                exchange=self._exchange,
-                routing_key=str(envelope.event_type),
-                body=envelope.model_dump_json().encode(),
-                properties=envelope_properties(envelope),
-            )
+            self._publish(envelope)
         except AMQPError:
             self.close()
-            raise
+            if not reused:
+                raise
+            # The broker may have dropped a connection that pika still reports open.
+            logger.info("broker connection went stale, reconnecting")
+            try:
+                self._publish(envelope)
+            except AMQPError:
+                self.close()
+                raise
+
+    def _publish(self, envelope: EventEnvelope) -> None:
+        self._ensure_channel().basic_publish(
+            exchange=self._exchange,
+            routing_key=str(envelope.event_type),
+            body=envelope.model_dump_json().encode(),
+            properties=envelope_properties(envelope),
+        )
+
+    def idle(self, seconds: float) -> None:
+        """Wait while answering broker heartbeats.
+
+        A blocking connection only does I/O when called, so without this an idle relay
+        misses heartbeats and the broker drops the connection.
+        """
+        connection = self._connection
+        if connection is None or not connection.is_open:
+            time.sleep(seconds)
+            return
+        try:
+            connection.sleep(seconds)
+        except AMQPError:
+            self.close()
 
     def close(self) -> None:
         connection, self._connection, self._channel = self._connection, None, None
@@ -174,8 +202,14 @@ def run_relay(
     stop: threading.Event,
     *,
     interval: float = 1.0,
+    idle: Callable[[float], object] | None = None,
 ) -> None:
-    """Drain the outbox until ``stop`` is set. Sleeps only when a batch came back empty."""
+    """Drain the outbox until ``stop`` is set. Sleeps only when a batch came back empty.
+
+    ``idle`` replaces the plain wait, e.g. ``PikaPublisher.idle`` to keep the connection
+    alive between batches.
+    """
+    wait = idle or stop.wait
     while not stop.is_set():
         try:
             published = publish_batch()
@@ -183,7 +217,7 @@ def run_relay(
             logger.exception("outbox relay batch failed")
             published = 0
         if published == 0:
-            stop.wait(interval)
+            wait(interval)
 
 
 def stop_on_signals() -> threading.Event:

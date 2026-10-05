@@ -1,6 +1,7 @@
 """Long running workers: outbox relay, event consumer, and the stale reservation sweep."""
 
 import threading
+import time
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -51,6 +52,9 @@ class Recorder:
         if self._fail_on is not None and len(self.sent) == self._fail_on:
             raise ConnectionError("broker down")
         self.sent.append(envelope)
+
+    def idle(self, seconds: float) -> None:
+        time.sleep(seconds)
 
     def close(self) -> None:
         self.closed = True

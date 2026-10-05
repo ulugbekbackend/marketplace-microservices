@@ -299,3 +299,125 @@ def test_relay_does_nothing_once_stopped() -> None:
     stop = threading.Event()
     stop.set()
     run_relay(lambda: pytest.fail("must not run"), stop)
+
+
+# --- PikaPublisher: stale connections and idling -------------------------------------------
+
+
+class FakeBlockingChannel:
+    def __init__(self, failures: int = 0) -> None:
+        self.is_open = True
+        self.failures = failures
+        self.published: list[str] = []
+
+    def confirm_delivery(self) -> None:
+        pass
+
+    def basic_publish(self, **kwargs: Any) -> None:
+        if self.failures:
+            self.failures -= 1
+            raise pika.exceptions.StreamLostError("reset by peer")
+        self.published.append(kwargs["routing_key"])
+
+
+class FakeBlockingConnection:
+    def __init__(self, channel: FakeBlockingChannel) -> None:
+        self.is_open = True
+        self._channel = channel
+        self.slept: list[float] = []
+        self.sleep_error: Exception | None = None
+
+    def channel(self) -> FakeBlockingChannel:
+        return self._channel
+
+    def sleep(self, seconds: float) -> None:
+        if self.sleep_error is not None:
+            raise self.sleep_error
+        self.slept.append(seconds)
+
+    def close(self) -> None:
+        self.is_open = False
+
+
+def publisher_with(
+    monkeypatch: pytest.MonkeyPatch, channels: list[FakeBlockingChannel]
+) -> tuple[Any, list[FakeBlockingConnection]]:
+    from py_common import rabbit
+
+    opened: list[FakeBlockingConnection] = []
+
+    def connect(_params: Any) -> FakeBlockingConnection:
+        connection = FakeBlockingConnection(channels[len(opened)])
+        opened.append(connection)
+        return connection
+
+    monkeypatch.setattr(pika, "BlockingConnection", connect)
+    return rabbit.PikaPublisher("amqp://guest:guest@localhost/"), opened
+
+
+def test_stale_connection_is_replaced_and_the_event_published_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stale, fresh = FakeBlockingChannel(), FakeBlockingChannel()
+    publisher, opened = publisher_with(monkeypatch, [stale, fresh])
+    publisher.publish(make_envelope())
+    stale.failures = 1  # the broker dropped the connection while the relay was idle
+
+    publisher.publish(make_envelope())
+
+    assert len(opened) == 2 and not opened[0].is_open
+    assert stale.published == ["order.created"]
+    assert fresh.published == ["order.created"]
+
+
+def test_failure_on_a_fresh_connection_is_raised(monkeypatch: pytest.MonkeyPatch) -> None:
+    publisher, opened = publisher_with(monkeypatch, [FakeBlockingChannel(failures=1)])
+    with pytest.raises(pika.exceptions.StreamLostError):
+        publisher.publish(make_envelope())
+    assert len(opened) == 1
+
+
+def test_second_failure_after_reconnect_is_raised(monkeypatch: pytest.MonkeyPatch) -> None:
+    stale, broken = FakeBlockingChannel(), FakeBlockingChannel(failures=1)
+    publisher, opened = publisher_with(monkeypatch, [stale, broken])
+    publisher.publish(make_envelope())
+    stale.failures = 1
+    with pytest.raises(pika.exceptions.StreamLostError):
+        publisher.publish(make_envelope())
+    assert not opened[1].is_open
+
+
+def test_idle_services_heartbeats_on_an_open_connection(monkeypatch: pytest.MonkeyPatch) -> None:
+    publisher, opened = publisher_with(monkeypatch, [FakeBlockingChannel()])
+    publisher.publish(make_envelope())
+    publisher.idle(0.5)
+    assert opened[0].slept == [0.5]
+
+
+def test_idle_drops_a_connection_that_failed(monkeypatch: pytest.MonkeyPatch) -> None:
+    publisher, opened = publisher_with(monkeypatch, [FakeBlockingChannel()])
+    publisher.publish(make_envelope())
+    opened[0].sleep_error = pika.exceptions.StreamLostError("gone")
+    publisher.idle(0.5)
+    assert not opened[0].is_open
+
+
+def test_idle_without_connection_just_waits(monkeypatch: pytest.MonkeyPatch) -> None:
+    from py_common import rabbit
+
+    waits: list[float] = []
+    monkeypatch.setattr("py_common.rabbit.time.sleep", waits.append)
+    rabbit.PikaPublisher("amqp://guest:guest@localhost/").idle(0.25)
+    assert waits == [0.25]
+
+
+def test_relay_uses_idle_between_empty_batches() -> None:
+    stop = threading.Event()
+    idled: list[float] = []
+
+    def idle(seconds: float) -> None:
+        idled.append(seconds)
+        stop.set()
+
+    run_relay(lambda: 0, stop, interval=0.3, idle=idle)
+    assert idled == [0.3]

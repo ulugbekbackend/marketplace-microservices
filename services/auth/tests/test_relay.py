@@ -1,6 +1,7 @@
 """Outbox relay: seller.approved rows reach the broker unchanged, once, in write order."""
 
 import threading
+import time
 from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
@@ -38,6 +39,9 @@ class Recorder:
         if self._fail_on is not None and len(self.sent) == self._fail_on:
             raise ConnectionError("broker down")
         self.sent.append(envelope)
+
+    def idle(self, seconds: float) -> None:
+        time.sleep(seconds)
 
     def close(self) -> None:
         self.closed = True

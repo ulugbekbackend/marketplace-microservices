@@ -35,6 +35,7 @@ class Command(BaseCommand):
                 lambda: publish_batch(publisher, limit=limit),
                 stop_on_signals(),
                 interval=options["interval"],
+                idle=publisher.idle,
             )
         finally:
             publisher.close()
