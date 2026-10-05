@@ -1,0 +1,545 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Search service",
+    "version": "0.2.0"
+  },
+  "paths": {
+    "/api/search": {
+      "get": {
+        "tags": ["search"],
+        "summary": "Search",
+        "description": "Full-text product search with filters, sorting and multi-select facets.\n\nLatin and Cyrillic spellings match each other (\"telefon\" = \"\u0442\u0435\u043b\u0435\u0444\u043e\u043d\"), and every\napostrophe variant of o' / g' is accepted. Price filters and facets use the card\nprice (the lowest variant price).",
+        "operationId": "search_api_search_get",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200,
+              "default": "",
+              "title": "Q"
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Category or any ancestor.",
+              "title": "Category"
+            },
+            "description": "Category or any ancestor."
+          },
+          {
+            "name": "seller",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Seller"
+            }
+          },
+          {
+            "name": "price_min",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Tiyin, inclusive.",
+              "title": "Price Min"
+            },
+            "description": "Tiyin, inclusive."
+          },
+          {
+            "name": "price_max",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Tiyin, inclusive.",
+              "title": "Price Max"
+            },
+            "description": "Tiyin, inclusive."
+          },
+          {
+            "name": "in_stock",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "In Stock"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/Sort",
+              "default": "relevance"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Page Size"
+            }
+          },
+          {
+            "name": "attr",
+            "in": "query",
+            "required": false,
+            "style": "deepObject",
+            "explode": true,
+            "description": "Attribute filters: `attr[color]=red&attr[color]=blue&attr[size]=M`. Values of one code are OR-ed, different codes are AND-ed.",
+            "schema": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/search/suggest": {
+      "get": {
+        "tags": ["search"],
+        "summary": "Suggest",
+        "description": "Up to 8 title suggestions for a search box (prefix match, any script).",
+        "operationId": "suggest_api_search_suggest_get",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 100,
+              "default": "",
+              "title": "Q"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuggestResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AttributeFacet": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "values": {
+            "items": {
+              "$ref": "#/components/schemas/AttributeValueFacet"
+            },
+            "type": "array",
+            "title": "Values"
+          }
+        },
+        "type": "object",
+        "required": ["code", "values"],
+        "title": "AttributeFacet"
+      },
+      "AttributeValueFacet": {
+        "properties": {
+          "value": {
+            "type": "string",
+            "title": "Value"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          },
+          "selected": {
+            "type": "boolean",
+            "title": "Selected"
+          }
+        },
+        "type": "object",
+        "required": ["value", "count", "selected"],
+        "title": "AttributeValueFacet"
+      },
+      "CategoryFacet": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "type": "object",
+        "required": ["id", "name", "count"],
+        "title": "CategoryFacet"
+      },
+      "Facets": {
+        "properties": {
+          "categories": {
+            "items": {
+              "$ref": "#/components/schemas/CategoryFacet"
+            },
+            "type": "array",
+            "title": "Categories"
+          },
+          "price_ranges": {
+            "items": {
+              "$ref": "#/components/schemas/PriceRangeFacet"
+            },
+            "type": "array",
+            "title": "Price Ranges"
+          },
+          "attributes": {
+            "items": {
+              "$ref": "#/components/schemas/AttributeFacet"
+            },
+            "type": "array",
+            "title": "Attributes"
+          }
+        },
+        "type": "object",
+        "required": ["categories", "price_ranges", "attributes"],
+        "title": "Facets"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "PriceRangeFacet": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "from_tiyin": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Tiyin",
+            "description": "Inclusive lower bound; null = open."
+          },
+          "to_tiyin": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "To Tiyin",
+            "description": "Exclusive upper bound; null = open."
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "type": "object",
+        "required": ["key", "from_tiyin", "to_tiyin", "count"],
+        "title": "PriceRangeFacet"
+      },
+      "SearchItem": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "seller_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Seller Id"
+          },
+          "shop_name": {
+            "type": "string",
+            "title": "Shop Name"
+          },
+          "min_price": {
+            "type": "integer",
+            "title": "Min Price",
+            "description": "Lowest variant price, tiyin."
+          },
+          "max_price": {
+            "type": "integer",
+            "title": "Max Price",
+            "description": "Highest variant price, tiyin."
+          },
+          "in_stock": {
+            "type": "boolean",
+            "title": "In Stock"
+          },
+          "image_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Url"
+          },
+          "rating": {
+            "type": "number",
+            "title": "Rating",
+            "default": 0.0
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "slug",
+          "title",
+          "seller_id",
+          "shop_name",
+          "min_price",
+          "max_price",
+          "in_stock"
+        ],
+        "title": "SearchItem",
+        "description": "What a product card needs."
+      },
+      "SearchResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SearchItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          },
+          "facets": {
+            "$ref": "#/components/schemas/Facets"
+          }
+        },
+        "type": "object",
+        "required": ["items", "total", "page", "page_size", "facets"],
+        "title": "SearchResponse"
+      },
+      "Sort": {
+        "type": "string",
+        "enum": ["relevance", "price_asc", "price_desc", "newest"],
+        "title": "Sort"
+      },
+      "SuggestResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Suggestion"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": ["items"],
+        "title": "SuggestResponse"
+      },
+      "Suggestion": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          }
+        },
+        "type": "object",
+        "required": ["id", "slug", "title"],
+        "title": "Suggestion"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": ["loc", "msg", "type"],
+        "title": "ValidationError"
+      }
+    }
+  }
+}
