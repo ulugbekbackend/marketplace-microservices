@@ -1,7 +1,7 @@
 """Event handlers of catalog.q: reservations driven by the order saga, search kept in step."""
 
 import threading
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID, uuid4
 
@@ -39,12 +39,14 @@ pytestmark = pytest.mark.django_db
 dispatch = make_dispatch(HANDLERS)
 
 
-def event(payload: Frozen, *, correlation_id: UUID | None = None) -> EventEnvelope:
+def event(
+    payload: Frozen, *, correlation_id: UUID | None = None, at: datetime | None = None
+) -> EventEnvelope:
     return build_event(
         payload,
         producer="order",
         correlation_id=correlation_id or uuid4(),
-        occurred_at=datetime.now(UTC),
+        occurred_at=at or datetime.now(UTC),
     )
 
 
@@ -53,14 +55,18 @@ def deliver(envelope: EventEnvelope) -> None:
 
 
 def created(
-    order_id: UUID, *items: tuple[ProductVariant, int], retry: bool = False
+    order_id: UUID,
+    *items: tuple[ProductVariant, int],
+    retry: bool = False,
+    at: datetime | None = None,
 ) -> EventEnvelope:
     return event(
         OrderCreated(
             order_id=order_id,
             items=[OrderItemRef(variant_id=variant.id, qty=qty) for variant, qty in items],
             reserve_retry=retry,
-        )
+        ),
+        at=at,
     )
 
 
@@ -82,19 +88,25 @@ def paid(order_id: UUID, variant: ProductVariant) -> EventEnvelope:
     )
 
 
-def expired(order_id: UUID, variant: ProductVariant) -> EventEnvelope:
+def expired(
+    order_id: UUID, variant: ProductVariant, *, at: datetime | None = None
+) -> EventEnvelope:
     return event(
-        OrderExpired(order_id=order_id, items=[OrderItemRef(variant_id=variant.id, qty=1)])
+        OrderExpired(order_id=order_id, items=[OrderItemRef(variant_id=variant.id, qty=1)]),
+        at=at,
     )
 
 
-def cancelled(order_id: UUID, variant: ProductVariant) -> EventEnvelope:
+def cancelled(
+    order_id: UUID, variant: ProductVariant, *, at: datetime | None = None
+) -> EventEnvelope:
     return event(
         OrderCancelled(
             order_id=order_id,
             items=[OrderItemRef(variant_id=variant.id, qty=1)],
             reason="customer",
-        )
+        ),
+        at=at,
     )
 
 
@@ -274,6 +286,88 @@ def test_release_of_an_unknown_order_is_a_no_op() -> None:
 
     assert ProcessedEvent.objects.filter(event_id=envelope.event_id).exists()
     assert not Outbox.objects.exists()
+
+
+# --- late payment vs. a late expiry ------------------------------------------------------
+
+T0 = datetime(2026, 10, 5, 12, 0, tzinfo=UTC)
+
+
+def test_expiry_processed_after_the_re_reservation_frees_nothing() -> None:
+    """order.expired sat in the retry queue while the late payment re-reserved the order."""
+    variant = make_variant(stock=3)
+    order_id = uuid4()
+    deliver(created(order_id, (variant, 2), at=T0))
+    first_expiry = expired(order_id, variant, at=T0 + timedelta(minutes=15))
+    deliver(first_expiry)
+    deliver(created(order_id, (variant, 2), retry=True, at=T0 + timedelta(minutes=16)))
+    # A second order.expired copy (redelivered under a new id, or a retried one) arrives late.
+    late_expiry = expired(order_id, variant, at=T0 + timedelta(minutes=15))
+
+    deliver(late_expiry)
+
+    assert counts(variant) == (3, 2)
+    assert StockReservation.objects.get(order_id=order_id).status == "active"
+    assert ProcessedEvent.objects.filter(event_id=late_expiry.event_id).exists()
+
+    deliver(paid(order_id, variant))
+
+    assert counts(variant) == (1, 0)
+    assert StockReservation.objects.get(order_id=order_id).status == "committed"
+
+
+def test_retry_processed_before_the_expiry_keeps_the_hold() -> None:
+    """The retry overtook the expiry: it finds the hold still active and claims it."""
+    variant = make_variant(stock=3)
+    order_id = uuid4()
+    deliver(created(order_id, (variant, 2), at=T0))
+    original = StockReservation.objects.get(order_id=order_id)
+    deliver(created(order_id, (variant, 2), retry=True, at=T0 + timedelta(minutes=16)))
+
+    deliver(expired(order_id, variant, at=T0 + timedelta(minutes=15)))
+
+    hold = StockReservation.objects.get(order_id=order_id)
+    assert (hold.status, hold.reserved_at) == ("active", T0 + timedelta(minutes=16))
+    assert hold.expires_at == original.expires_at  # a repeat reserve does not extend
+    assert counts(variant) == (3, 2)
+    assert len(outbox(EventType.STOCK_RESERVED)) == 2
+
+    deliver(paid(order_id, variant))
+
+    assert counts(variant) == (1, 0)
+
+
+def test_expiry_releases_a_hold_reserved_before_it() -> None:
+    variant = make_variant(stock=3)
+    order_id = uuid4()
+    deliver(created(order_id, (variant, 2), at=T0))
+
+    deliver(expired(order_id, variant, at=T0 + timedelta(minutes=15)))
+
+    assert counts(variant) == (3, 0)
+    hold = StockReservation.objects.get(order_id=order_id)
+    assert (hold.status, hold.reserved_at) == ("released", T0)
+
+
+def test_expiry_at_the_same_instant_still_releases() -> None:
+    variant = make_variant(stock=3)
+    order_id = uuid4()
+    deliver(created(order_id, (variant, 1), at=T0))
+
+    deliver(cancelled(order_id, variant, at=T0))
+
+    assert counts(variant) == (3, 0)
+
+
+def test_rows_from_before_the_column_existed_are_released() -> None:
+    variant = make_variant(stock=3)
+    order_id = uuid4()
+    deliver(created(order_id, (variant, 1), at=T0))
+    StockReservation.objects.filter(order_id=order_id).update(reserved_at=None)
+
+    deliver(expired(order_id, variant, at=T0 - timedelta(days=1)))
+
+    assert counts(variant) == (3, 0)
 
 
 # --- search in step -----------------------------------------------------------------------

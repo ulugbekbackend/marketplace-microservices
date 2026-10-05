@@ -26,7 +26,11 @@ from products.reservations import ReservationItem, Reserved, ReserveFailed
 
 
 def reserve(
-    order_id: UUID, items: Iterable[ReservationItem], *, correlation_id: UUID | None = None
+    order_id: UUID,
+    items: Iterable[ReservationItem],
+    *,
+    reserved_at: datetime | None = None,
+    correlation_id: UUID | None = None,
 ) -> Reserved | ReserveFailed:
     wanted = list(items)
     product_ids = set(
@@ -34,7 +38,11 @@ def reserve(
             "product_id", flat=True
         )
     )
-    return _watching(product_ids, lambda: reservations.reserve(order_id, wanted), correlation_id)
+    return _watching(
+        product_ids,
+        lambda: reservations.reserve(order_id, wanted, reserved_at=reserved_at),
+        correlation_id,
+    )
 
 
 def commit(order_id: UUID, *, correlation_id: UUID | None = None) -> list[ReservationItem]:
@@ -44,9 +52,16 @@ def commit(order_id: UUID, *, correlation_id: UUID | None = None) -> list[Reserv
     )
 
 
-def release(order_id: UUID, *, correlation_id: UUID | None = None) -> list[ReservationItem]:
+def release(
+    order_id: UUID,
+    *,
+    reserved_before: datetime | None = None,
+    correlation_id: UUID | None = None,
+) -> list[ReservationItem]:
     return _watching(
-        _order_products(order_id), lambda: reservations.release(order_id), correlation_id
+        _order_products(order_id),
+        lambda: reservations.release(order_id, reserved_before=reserved_before),
+        correlation_id,
     )
 
 

@@ -61,7 +61,12 @@ def on_order_created(envelope: EventEnvelope) -> None:
     with transaction.atomic():
         if not _first_time(envelope):
             return
-        result = stock.reserve(payload.order_id, items, correlation_id=envelope.correlation_id)
+        result = stock.reserve(
+            payload.order_id,
+            items,
+            reserved_at=envelope.occurred_at,
+            correlation_id=envelope.correlation_id,
+        )
         if isinstance(result, Reserved):
             _emit(StockReserved(order_id=payload.order_id, expires_at=result.expires_at), envelope)
         else:
@@ -89,13 +94,28 @@ def on_order_paid(envelope: EventEnvelope) -> None:
 
 
 def on_order_released(envelope: EventEnvelope) -> None:
-    """``order.expired`` or ``order.cancelled``: give the held units back."""
+    """``order.expired`` or ``order.cancelled``: give the held units back.
+
+    Only units reserved by an ``order.created`` that occurred no later than this event:
+    a retried or late ``order.expired`` must not free what a late payment reserved again
+    after the expiry. Both timestamps come from the order service's clock, so they are
+    compared as they are, without a tolerance.
+    """
     model = OrderExpired if envelope.event_type is EventType.ORDER_EXPIRED else OrderCancelled
     payload = model.model_validate(envelope.payload)
     with transaction.atomic():
         if not _first_time(envelope):
             return
-        stock.release(payload.order_id, correlation_id=envelope.correlation_id)
+        freed = stock.release(
+            payload.order_id,
+            reserved_before=envelope.occurred_at,
+            correlation_id=envelope.correlation_id,
+        )
+        if not freed:
+            logger.info(
+                "nothing to release",
+                extra={"order_id": str(payload.order_id), "event_id": str(envelope.event_id)},
+            )
 
 
 def on_seller_approved(envelope: EventEnvelope) -> None:
