@@ -17,7 +17,7 @@ from rest_framework.views import APIView
 
 from contracts.enums import OrderStatus
 from contracts.headers import IDEMPOTENCY_KEY
-from orders import idempotency, services
+from orders import idempotency, saga, services
 from orders.models import Order
 from orders.serializers import (
     CheckoutResultSerializer,
@@ -98,9 +98,10 @@ class CheckoutView(APIView):
         operation_id="orders_checkout",
         summary="Create an order from the cart",
         description=(
-            "Snapshots current catalog prices, creates the order and reserves its stock. "
-            "The answer carries the order id and its status (RESERVED, or CANCELLED when "
-            "the stock could not be held); poll the status endpoint afterwards. "
+            "Snapshots current catalog prices and creates a PENDING order; the catalog "
+            "reserves its stock asynchronously. Poll the status endpoint: PENDING turns "
+            "into RESERVED (pay before reserved_until) or CANCELLED with cancel_reason "
+            "OUT_OF_STOCK when the stock could not be held. "
             f"Retries with the same {IDEMPOTENCY_KEY} and body replay the first answer."
         ),
         parameters=[
@@ -187,14 +188,20 @@ class MockPayView(APIView):
         tags=[TAG],
         operation_id="orders_pay_mock",
         summary="Pay an order without a provider (development only)",
-        description="Exists only when PAYMENT_MOCK_ENABLED and DEBUG are on; 404 otherwise.",
+        description=(
+            "Takes the same path as a payment.paid event from a provider. Exists only when "
+            "PAYMENT_MOCK_ENABLED and DEBUG are on; 404 otherwise."
+        ),
         request=None,
         responses={
             200: OrderDetailSerializer,
             **error_responses(
                 **ORDER_ERRORS,
-                e409="INVALID_TRANSITION, ORDER_EXPIRED, NOT_RESERVED",
-                e503="SERVICE_UNAVAILABLE: catalog did not answer",
+                e409=(
+                    "NOT_RESERVED: still PENDING, try again shortly; ORDER_EXPIRED; "
+                    "INVALID_TRANSITION: cancelled or refunded"
+                ),
+                e503="SERVICE_UNAVAILABLE: catalog did not answer (commission rates)",
             ),
         },
     )
@@ -202,5 +209,6 @@ class MockPayView(APIView):
         if not (settings.PAYMENT_MOCK_ENABLED and settings.DEBUG):
             raise NotFound()
         order = own_order(request, order_id)
-        services.mark_paid(order.id)
+        services.expire_if_overdue(order)
+        saga.mock_pay(order)
         return detail_response(order.id)

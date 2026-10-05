@@ -1,6 +1,7 @@
 """Expire every RESERVED order whose reservation time has passed.
 
-P4 runs this on a schedule; rows another worker holds are skipped (SKIP LOCKED).
+The order-worker runs the same function every 30 s (``orders.tasks``); rows another
+worker holds are skipped (SKIP LOCKED).
 """
 
 from typing import Any
@@ -11,7 +12,7 @@ from orders.services import expire_overdue
 
 
 class Command(BaseCommand):
-    help = "Expire overdue reserved orders and release their stock."
+    help = "Expire overdue reserved orders (the catalog releases their stock)."
 
     def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument("--batch-size", type=int, default=100)

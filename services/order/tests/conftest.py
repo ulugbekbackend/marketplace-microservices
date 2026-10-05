@@ -1,10 +1,10 @@
 """Shared fixtures. Tests run against real Postgres; cart and catalog are served by an
-in-process fake behind ``httpx.MockTransport`` and Redis is fakeredis."""
+in-process fake behind ``httpx.MockTransport`` and Redis is fakeredis. Events from other
+services are built here and fed straight into the saga handlers."""
 
 import json
 import threading
 from collections.abc import Iterator
-from datetime import datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -14,8 +14,14 @@ import pytest
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from contracts.enums import UserRole
+from contracts.enums import EventType, UserRole
+from contracts.events import EventEnvelope, Frozen, build_event
+from messaging.management.commands import relay_outbox
+from messaging.models import Outbox
+from messaging.outbox import to_envelope
 from orders import clients, idempotency
+from orders.management.commands import consume_events
+from orders.models import Order
 
 CART_URL = "http://cart.test"
 CATALOG_URL = "http://catalog.test"
@@ -29,30 +35,19 @@ ADDRESS = {
 }
 
 
-def _error(status: int, code: str, details: dict[str, Any] | None = None) -> httpx.Response:
-    return httpx.Response(
-        status, json={"error": {"code": code, "message": code, "details": details or {}}}
-    )
-
-
 class FakeUpstream:
     """Cart and catalog internal APIs with switchable failures.
 
-    ``*_mode`` values: "ok", "down" (connection error), "error" (HTTP 500), plus
-    "out_of_stock" for reserve and "not_reserved" for commit.
+    ``*_mode`` values: "ok", "down" (connection error), "error" (HTTP 500). The catalog
+    serves only the variants bulk read; any other catalog path answers 404.
     """
 
     def __init__(self) -> None:
         self.carts: dict[UUID, list[dict[str, Any]]] = {}
         self.variants: dict[UUID, dict[str, Any]] = {}
-        self.expires_at: datetime = timezone.now() + timedelta(minutes=15)
         self.cart_mode = "ok"
         self.clear_mode = "ok"
         self.bulk_mode = "ok"
-        self.reserve_mode = "ok"
-        self.commit_mode = "ok"
-        self.release_mode = "ok"
-        self.out_of_stock: list[UUID] = []
         self.calls: list[tuple[str, str]] = []
         self.requests: list[httpx.Request] = []
         self._lock = threading.Lock()
@@ -130,44 +125,16 @@ class FakeUpstream:
         )
 
     def _catalog(self, request: httpx.Request, path: str) -> httpx.Response:
-        body = json.loads(request.content) if request.content else {}
-        if path.endswith("/variants/bulk/"):
-            failed = self._fail(self.bulk_mode, request)
-            if failed:
-                return failed
-            items = [
-                self.variants[UUID(vid)]
-                for vid in body["variant_ids"]
-                if UUID(vid) in self.variants
-            ]
-            return httpx.Response(200, json={"items": items})
-        if path.endswith("/commit/"):
-            failed = self._fail(self.commit_mode, request)
-            if failed:
-                return failed
-            if self.commit_mode == "not_reserved":
-                return _error(409, "NOT_RESERVED")
-            return httpx.Response(200, json={"status": "committed", "items": []})
-        if path.endswith("/release/"):
-            failed = self._fail(self.release_mode, request)
-            if failed:
-                return failed
-            return httpx.Response(200, json={"status": "released", "items": []})
-        # reservations/
-        failed = self._fail(self.reserve_mode, request)
+        if not path.endswith("/variants/bulk/"):
+            return httpx.Response(404, json={})
+        failed = self._fail(self.bulk_mode, request)
         if failed:
             return failed
-        if self.reserve_mode == "out_of_stock":
-            return _error(409, "OUT_OF_STOCK", {"variant_ids": [str(v) for v in self.out_of_stock]})
-        return httpx.Response(
-            200,
-            json={
-                "order_id": body["order_id"],
-                "status": "active",
-                "expires_at": self.expires_at.isoformat(),
-                "items": body["items"],
-            },
-        )
+        body = json.loads(request.content)
+        items = [
+            self.variants[UUID(vid)] for vid in body["variant_ids"] if UUID(vid) in self.variants
+        ]
+        return httpx.Response(200, json={"items": items})
 
 
 @pytest.fixture(autouse=True)
@@ -185,6 +152,18 @@ def redis_client(monkeypatch: pytest.MonkeyPatch) -> Iterator[fakeredis.FakeRedi
     monkeypatch.setattr(idempotency, "get_redis", lambda: client)
     yield client
     client.flushall()
+
+
+@pytest.fixture(autouse=True)
+def recycled_connections(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Long-running loops call close_old_connections(); inside a test transaction that
+    would close the connection, so it is recorded instead."""
+    calls: list[str] = []
+    for module in (relay_outbox, consume_events):
+        monkeypatch.setattr(
+            module, "close_old_connections", lambda name=module.__name__: calls.append(name)
+        )
+    return calls
 
 
 @pytest.fixture
@@ -224,3 +203,28 @@ def checkout(client: APIClient, key: str | None = "key-1", **body: Any) -> Any:
     return client.post(
         "/api/orders/checkout/", body or {"address": ADDRESS}, format="json", **headers
     )
+
+
+# --- events -----------------------------------------------------------------------------
+
+
+def outbox(event_type: EventType) -> list[EventEnvelope]:
+    """Events of one type the order service wrote, oldest first."""
+    return [to_envelope(row) for row in Outbox.objects.filter(event_type=event_type.value)]
+
+
+def incoming(payload: Frozen, *, producer: str = "catalog") -> EventEnvelope:
+    """An event another service published about ``payload.order_id``."""
+    order_id = payload.order_id  # type: ignore[attr-defined]
+    return build_event(
+        payload, producer=producer, correlation_id=order_id, occurred_at=timezone.now()
+    )
+
+
+def known_variants(upstream: FakeUpstream, order: Order, *, rate: str = "0.1000") -> None:
+    """Teach the fake catalog the variants of a factory-made order (for commission rates)."""
+    for item in order.items.all():
+        template = upstream.variants[
+            upstream.add_variant(seller_id=item.seller_id, commission_rate=rate)
+        ]
+        upstream.variants[item.variant_id] = {**template, "variant_id": str(item.variant_id)}

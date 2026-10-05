@@ -1,4 +1,4 @@
-"""Checkout: cart -> order snapshot -> stock reservation."""
+"""Checkout: cart -> price snapshot -> PENDING order + order.created (reservation is async)."""
 
 from typing import Any
 from uuid import UUID, uuid4
@@ -7,26 +7,21 @@ import pytest
 from rest_framework.test import APIClient
 
 from contracts.enums import EventType, OrderStatus
-from contracts.events import OrderCancelled, OrderCreated
+from contracts.events import OrderCreated
 from messaging.models import Outbox
-from messaging.outbox import to_envelope
 from orders import services
 from orders.clients import CartLine
 from orders.models import Order, OrderItem, OrderStatusHistory
-from tests.conftest import ADDRESS, FakeUpstream, checkout
+from tests.conftest import ADDRESS, FakeUpstream, checkout, outbox
 
 pytestmark = pytest.mark.django_db
-
-
-def events(event_type: EventType) -> list[Any]:
-    return [to_envelope(row) for row in Outbox.objects.filter(event_type=event_type.value)]
 
 
 def nothing_written() -> bool:
     return not (Order.objects.exists() or OrderItem.objects.exists() or Outbox.objects.exists())
 
 
-def test_checkout_snapshots_the_catalog_and_reserves(
+def test_checkout_snapshots_the_catalog_and_asks_for_stock(
     api: APIClient, upstream: FakeUpstream, customer_id: UUID
 ) -> None:
     seller_a, seller_b = uuid4(), uuid4()
@@ -43,11 +38,12 @@ def test_checkout_snapshots_the_catalog_and_reserves(
 
     assert response.status_code == 202
     order = Order.objects.get()
-    assert response.json() == {"order_id": str(order.id), "status": "RESERVED"}
+    assert response.json() == {"order_id": str(order.id), "status": "PENDING"}
     assert order.customer_id == customer_id
-    assert order.status == OrderStatus.RESERVED.value
+    assert order.status == OrderStatus.PENDING.value
     assert order.total_tiyin == 2 * 500_000 + 3 * 30_000
-    assert order.reserved_until == upstream.expires_at
+    assert order.reserved_until is None
+    assert order.late_payment is False
     assert order.delivery_address == {**ADDRESS, "notes": ""}
 
     items = {item.variant_id: item for item in order.items.all()}
@@ -63,17 +59,32 @@ def test_checkout_snapshots_the_catalog_and_reserves(
     assert items[case].qty == 3
 
     history = list(OrderStatusHistory.objects.filter(order=order).values_list("to_status"))
-    assert history == [("PENDING",), ("RESERVED",)]
+    assert history == [("PENDING",)]
 
-    [created] = events(EventType.ORDER_CREATED)
+    [created] = outbox(EventType.ORDER_CREATED)
     payload = OrderCreated.model_validate(created.payload)
     assert payload.order_id == order.id
     assert {(ref.variant_id, ref.qty) for ref in payload.items} == {(phone, 2), (case, 3)}
+    assert payload.reserve_retry is False
     assert created.producer == "order"
     assert created.correlation_id == order.id
+    assert Outbox.objects.count() == 1
 
-    reserve = next(r for r in upstream.requests if r.url.path.endswith("/reservations/"))
-    assert reserve.method == "POST"
+    # Nothing is reserved over HTTP any more: the catalog answers order.created.
+    assert [path for _, path in upstream.calls if "catalog" in path] == [
+        "/internal/catalog/variants/bulk/"
+    ]
+
+
+def test_status_endpoint_shows_pending_until_the_catalog_answers(
+    api: APIClient, upstream: FakeUpstream, customer_id: UUID
+) -> None:
+    upstream.put_in_cart(customer_id, upstream.add_variant(), 1)
+    order_id = checkout(api).json()["order_id"]
+
+    body = api.get(f"/api/orders/{order_id}/status/").json()
+
+    assert body == {"status": "PENDING", "reserved_until": None}
 
 
 def test_prices_come_from_the_catalog_not_the_cart(
@@ -118,67 +129,6 @@ def test_unavailable_items_are_listed_and_nothing_is_written(
         {"variant_id": str(unknown), "reason": "not_found", "available": 0},
     ]
     assert nothing_written()
-    assert upstream.count("POST", "/reservations/") == 0
-
-
-def test_out_of_stock_at_reservation_cancels_the_order(
-    api: APIClient, upstream: FakeUpstream, customer_id: UUID
-) -> None:
-    variant = upstream.add_variant()
-    upstream.put_in_cart(customer_id, variant, 1)
-    upstream.reserve_mode = "out_of_stock"
-    upstream.out_of_stock = [variant]
-
-    response = checkout(api)
-
-    assert response.status_code == 202
-    assert response.json()["status"] == "CANCELLED"
-    order = Order.objects.get()
-    assert order.status == OrderStatus.CANCELLED.value
-    assert order.cancel_reason == "OUT_OF_STOCK"
-    assert order.reserved_until is None
-    [cancelled] = events(EventType.ORDER_CANCELLED)
-    assert OrderCancelled.model_validate(cancelled.payload).reason == "OUT_OF_STOCK"
-
-
-@pytest.mark.parametrize("mode", ["down", "error"])
-def test_catalog_failure_at_reservation_releases_and_cancels(
-    api: APIClient, upstream: FakeUpstream, customer_id: UUID, mode: str
-) -> None:
-    variant = upstream.add_variant()
-    upstream.put_in_cart(customer_id, variant, 1)
-    upstream.reserve_mode = mode
-
-    response = checkout(api)
-
-    assert response.status_code == 202
-    assert response.json()["status"] == "CANCELLED"
-    order = Order.objects.get()
-    assert order.cancel_reason == "RESERVATION_FAILED"
-    assert upstream.count("POST", f"/reservations/{order.id}/release/") == 1
-    assert len(events(EventType.ORDER_CANCELLED)) == 1
-
-
-def test_other_reservation_refusal_is_a_reservation_failure(
-    api: APIClient, upstream: FakeUpstream, customer_id: UUID, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    variant = upstream.add_variant()
-    upstream.put_in_cart(customer_id, variant, 1)
-    upstream.reserve_mode = "out_of_stock"
-    original = upstream._catalog
-
-    def refuse(request: Any, path: str) -> Any:
-        response = original(request, path)
-        if path.endswith("/reservations/"):
-            response = type(response)(
-                409, json={"error": {"code": "VALIDATION_ERROR", "message": "", "details": {}}}
-            )
-        return response
-
-    monkeypatch.setattr(upstream, "_catalog", refuse)
-
-    assert checkout(api).json()["status"] == "CANCELLED"
-    assert Order.objects.get().cancel_reason == "RESERVATION_FAILED"
 
 
 @pytest.mark.parametrize("which", ["cart_mode", "bulk_mode"])
@@ -249,26 +199,6 @@ def test_outbox_row_shares_the_order_transaction(
 
     assert nothing_written()
     assert not OrderStatusHistory.objects.exists()
-
-
-def test_order_cancelled_while_reserving_gives_the_stock_back(
-    upstream: FakeUpstream, customer_id: UUID, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    variant = upstream.add_variant()
-    upstream.put_in_cart(customer_id, variant, 1)
-    original = upstream._catalog
-
-    def cancel_during_reserve(request: Any, path: str) -> Any:
-        if path.endswith("/reservations/"):
-            Order.objects.update(status=OrderStatus.CANCELLED.value)
-        return original(request, path)
-
-    monkeypatch.setattr(upstream, "_catalog", cancel_during_reserve)
-
-    order = services.checkout(customer_id, dict(ADDRESS))
-
-    assert order.status == OrderStatus.CANCELLED.value
-    assert upstream.count("POST", "/release/") == 1
 
 
 def test_repeated_cart_lines_are_merged() -> None:

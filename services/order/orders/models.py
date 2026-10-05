@@ -24,6 +24,8 @@ class Order(models.Model):
     delivery_address = models.JSONField()
     # Until when the catalog holds the stock; set once the order is RESERVED.
     reserved_until = models.DateTimeField(null=True, blank=True)
+    # Paid after the reservation expired: the stock is being reserved again (or refunded).
+    late_payment = models.BooleanField(default=False)
     cancel_reason = models.CharField(max_length=64, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

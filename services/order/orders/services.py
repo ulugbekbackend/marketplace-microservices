@@ -1,10 +1,13 @@
-"""Order use cases: checkout, reservation, payment, cancellation and expiry.
+"""Order use cases: checkout, payment, cancellation and expiry.
 
-In P2 the API calls these synchronously; in P4 the event consumers call the same
-functions (``reserve_stock`` on order creation, ``mark_paid`` on ``payment.paid``,
-``expire_overdue`` from a scheduled task). Every status change locks the order row,
-goes through ``state.transition`` and writes its outbox event in the same transaction.
-HTTP calls to other services never run while a row lock is held.
+Checkout writes a PENDING order together with ``order.created``; the catalog answers with
+``stock.reserved`` / ``stock.failed`` and the payment service with ``payment.paid``, which
+``orders.saga`` turns into the status changes below. Every status change locks the order
+row, goes through ``state.transition`` and writes its outbox event in the same
+transaction. HTTP calls to other services never run while a row lock is held.
+
+Stock is released by the catalog when it consumes ``order.cancelled`` / ``order.expired``;
+the order service no longer calls the catalog to reserve, commit or release.
 """
 
 import logging
@@ -32,16 +35,9 @@ from contracts.events import (
 from contracts.money import apply_commission
 from messaging.outbox import PRODUCER, add_to_outbox
 from orders import clients
-from orders.clients import CartLine, NotReserved, ReserveRejected, ServiceUnavailable, VariantInfo
+from orders.clients import CartLine, ServiceUnavailable, VariantInfo
 from orders.models import Order, OrderItem, SubOrder
-from orders.state import (
-    InvalidTransition,
-    can_transition,
-    lock_order,
-    record_created,
-    record_sub_order_created,
-    transition,
-)
+from orders.state import lock_order, record_created, record_sub_order_created, transition
 from py_common.web.drf import ApiError
 
 logger = logging.getLogger(__name__)
@@ -52,16 +48,18 @@ RESERVATION_FAILED = "RESERVATION_FAILED"
 CANCELLED_BY_CUSTOMER = "CANCELLED_BY_CUSTOMER"
 RESERVATION_EXPIRED = "RESERVATION_EXPIRED"
 
-PAID_STATES = frozenset({OrderStatus.PAID, OrderStatus.FULFILLING, OrderStatus.COMPLETED})
+PAID_STATES = frozenset(
+    {OrderStatus.PAID.value, OrderStatus.FULFILLING.value, OrderStatus.COMPLETED.value}
+)
 
 
 # --- checkout -----------------------------------------------------------------------
 
 
 def checkout(customer_id: UUID, address: dict[str, Any]) -> Order:
-    """Turn the customer's cart into an order and try to hold its stock.
+    """Turn the customer's cart into a PENDING order and ask the catalog for its stock.
 
-    Returns the order as RESERVED, or CANCELLED when the stock could not be held.
+    The reservation answer arrives later as an event, so the order comes back PENDING.
     Raises CART_EMPTY / ITEMS_UNAVAILABLE (nothing written) or SERVICE_UNAVAILABLE.
     """
     wanted = merge_lines(clients.get_cart(customer_id))
@@ -78,8 +76,7 @@ def checkout(customer_id: UUID, address: dict[str, Any]) -> Order:
             details={"items": problems},
         )
 
-    order = create_order(customer_id, address, wanted, variants)
-    return reserve_stock(order.id)
+    return create_order(customer_id, address, wanted, variants)
 
 
 def merge_lines(lines: Iterable[CartLine]) -> dict[UUID, int]:
@@ -156,110 +153,15 @@ def _snapshot(order: Order, info: VariantInfo, qty: int) -> OrderItem:
     )
 
 
-# --- reservation ----------------------------------------------------------------------
-
-
-def reserve_stock(order_id: UUID) -> Order:
-    """Ask the catalog to hold the order's stock: PENDING -> RESERVED or CANCELLED."""
-    items = _item_refs(order_id)
-    try:
-        result = clients.reserve(order_id, [(ref.variant_id, ref.qty) for ref in items])
-    except ServiceUnavailable:
-        logger.warning("reservation failed, releasing", extra={"order_id": str(order_id)})
-        _release_quietly(order_id)
-        return _cancel_pending(order_id, RESERVATION_FAILED)
-
-    if isinstance(result, ReserveRejected):
-        reason = OUT_OF_STOCK if result.code == OUT_OF_STOCK else RESERVATION_FAILED
-        return _cancel_pending(order_id, reason)
-
-    with transaction.atomic():
-        order = lock_order(order_id)
-        if order.status == OrderStatus.PENDING.value:
-            order.reserved_until = result.expires_at
-            order.save(update_fields=["reserved_until", "updated_at"])
-            return transition(order, OrderStatus.RESERVED)
-    # Cancelled while the catalog was reserving: the stock it just took goes back.
-    _release_quietly(order_id)
-    return order
-
-
-def _cancel_pending(order_id: UUID, reason: str) -> Order:
-    with transaction.atomic():
-        order = lock_order(order_id)
-        if order.status == OrderStatus.PENDING.value:
-            _cancel_locked(order, reason)
-        return order
-
-
 # --- payment --------------------------------------------------------------------------
 
 
-def mark_paid(order_id: UUID, *, allow_expired: bool = False) -> Order:
-    """The order is paid: commit its stock, split it per seller, publish ``order.paid``.
+def commission_rates(order: Order) -> dict[UUID, Decimal]:
+    """Each seller's current commission rate, read fresh from the catalog.
 
-    Idempotent: an order that is already paid is returned unchanged. The mock payment
-    endpoint calls this now; the ``payment.paid`` consumer (P5) calls it with
-    ``allow_expired=True`` for late payments.
+    Call before taking the row lock: it is an HTTP request.
     """
-    order = Order.objects.get(id=order_id)
-    if order.status in PAID_STATES:
-        return order
-    if not allow_expired and (expire_if_overdue(order) or order.status == OrderStatus.EXPIRED):
-        raise ApiError(
-            "ORDER_EXPIRED",
-            "The reservation of this order has expired.",
-            status=409,
-            details={"order_id": str(order_id)},
-        )
-    if not can_transition(OrderStatus(order.status), OrderStatus.PAID):
-        raise InvalidTransition(order.status, OrderStatus.PAID.value)
-
     items = list(order.items.all())
-    # Read the rates before committing: if the catalog is down, the stock stays held.
-    rates = _commission_rates(items)
-    try:
-        clients.commit(order_id)
-    except NotReserved as exc:
-        raise ApiError(
-            "NOT_RESERVED",
-            "The catalog holds no stock for this order.",
-            status=409,
-            details={"order_id": str(order_id)},
-        ) from exc
-
-    with transaction.atomic():
-        order = lock_order(order_id)
-        if order.status in PAID_STATES:
-            return order  # a concurrent call got here first
-        transition(order, OrderStatus.PAID)
-        sub_orders = _split_by_seller(order, items, rates)
-        publish(
-            order,
-            OrderPaid(
-                order_id=order.id,
-                customer_id=order.customer_id,
-                sub_orders=[
-                    SubOrderRef(
-                        id=sub_order.id,
-                        seller_id=sub_order.seller_id,
-                        items=[
-                            OrderItemRef(variant_id=item.variant_id, qty=item.qty) for item in lines
-                        ],
-                        subtotal_tiyin=sub_order.subtotal_tiyin,
-                        commission_tiyin=sub_order.commission_tiyin,
-                    )
-                    for sub_order, lines in sub_orders
-                ],
-            ),
-        )
-
-    _clear_cart_quietly(order.customer_id)
-    return order
-
-
-def _commission_rates(items: list[OrderItem]) -> dict[UUID, Decimal]:
-    """Each seller's current commission rate, read fresh from the catalog."""
     variants = clients.variants_bulk(item.variant_id for item in items)
     rates = {info.seller_id: info.commission_rate for info in variants.values()}
     missing = {item.seller_id for item in items} - rates.keys()
@@ -269,6 +171,35 @@ def _commission_rates(items: list[OrderItem]) -> dict[UUID, Decimal]:
         )
         raise ServiceUnavailable(clients.CATALOG)
     return rates
+
+
+def pay_locked(order: Order, rates: dict[UUID, Decimal], *, reason: str = "") -> None:
+    """Move a locked order to PAID, split it per seller and publish ``order.paid``.
+
+    The catalog commits the reserved stock when it consumes ``order.paid``.
+    """
+    items = list(order.items.all())
+    transition(order, OrderStatus.PAID, reason=reason)
+    sub_orders = _split_by_seller(order, items, rates)
+    publish(
+        order,
+        OrderPaid(
+            order_id=order.id,
+            customer_id=order.customer_id,
+            sub_orders=[
+                SubOrderRef(
+                    id=sub_order.id,
+                    seller_id=sub_order.seller_id,
+                    items=[
+                        OrderItemRef(variant_id=item.variant_id, qty=item.qty) for item in lines
+                    ],
+                    subtotal_tiyin=sub_order.subtotal_tiyin,
+                    commission_tiyin=sub_order.commission_tiyin,
+                )
+                for sub_order, lines in sub_orders
+            ],
+        ),
+    )
 
 
 def _split_by_seller(
@@ -296,26 +227,32 @@ def _split_by_seller(
     return result
 
 
+def clear_cart_quietly(customer_id: UUID) -> None:
+    """Best effort after payment: a cart that could not be cleared only costs a click."""
+    try:
+        clients.clear_cart(customer_id)
+    except ServiceUnavailable:
+        logger.warning("cart clear failed", extra={"customer_id": str(customer_id)})
+
+
 # --- cancellation and expiry --------------------------------------------------------------
 
 
 def cancel_order(order_id: UUID, *, reason: str = CANCELLED_BY_CUSTOMER) -> Order:
-    """PENDING or RESERVED -> CANCELLED, then the held stock is released."""
+    """PENDING or RESERVED -> CANCELLED; the catalog releases the stock on ``order.cancelled``."""
     with transaction.atomic():
         order = lock_order(order_id)
-        _cancel_locked(order, reason)
-    _release_quietly(order_id)
+        cancel_locked(order, reason)
     return order
 
 
 def expire_order(order_id: UUID, *, now: datetime | None = None) -> bool:
-    """RESERVED past ``reserved_until`` -> EXPIRED and release. False when not overdue."""
+    """RESERVED past ``reserved_until`` -> EXPIRED. False when not overdue."""
     with transaction.atomic():
         order = lock_order(order_id)
         if not is_overdue(order, now):
             return False
         _expire_locked(order)
-    _release_quietly(order_id)
     return True
 
 
@@ -329,7 +266,7 @@ def expire_if_overdue(order: Order) -> bool:
 
 
 def expire_overdue(*, batch_size: int = 100, now: datetime | None = None) -> int:
-    """Expire every overdue order. Rows locked by another worker are skipped."""
+    """Expire every overdue order (the scheduled task). Rows another worker holds are skipped."""
     total = 0
     while True:
         moment = now or timezone.now()
@@ -341,8 +278,6 @@ def expire_overdue(*, batch_size: int = 100, now: datetime | None = None) -> int
             )
             for order in batch:
                 _expire_locked(order)
-        for order in batch:
-            _release_quietly(order.id)
         total += len(batch)
         if len(batch) < batch_size:
             return total
@@ -358,18 +293,18 @@ def is_overdue(order: Order, now: datetime | None = None) -> bool:
 
 def _expire_locked(order: Order) -> None:
     transition(order, OrderStatus.EXPIRED, reason=RESERVATION_EXPIRED)
-    publish(order, OrderExpired(order_id=order.id, items=_item_refs(order.id)))
+    publish(order, OrderExpired(order_id=order.id, items=item_refs(order.id)))
 
 
-def _cancel_locked(order: Order, reason: str) -> None:
+def cancel_locked(order: Order, reason: str) -> None:
     transition(order, OrderStatus.CANCELLED, reason=reason)
-    publish(order, OrderCancelled(order_id=order.id, items=_item_refs(order.id), reason=reason))
+    publish(order, OrderCancelled(order_id=order.id, items=item_refs(order.id), reason=reason))
 
 
 # --- helpers ----------------------------------------------------------------------------
 
 
-def _item_refs(order_id: UUID) -> list[OrderItemRef]:
+def item_refs(order_id: UUID) -> list[OrderItemRef]:
     return [
         OrderItemRef(variant_id=variant_id, qty=qty)
         for variant_id, qty in OrderItem.objects.filter(order_id=order_id)
@@ -383,18 +318,3 @@ def publish(order: Order, payload: Frozen) -> None:
     add_to_outbox(
         build_event(payload, producer=PRODUCER, correlation_id=order.id, occurred_at=timezone.now())
     )
-
-
-def _release_quietly(order_id: UUID) -> None:
-    """Best effort: in P4 the ``order.cancelled``/``order.expired`` events release too."""
-    try:
-        clients.release(order_id)
-    except ServiceUnavailable:
-        logger.warning("stock release failed", extra={"order_id": str(order_id)})
-
-
-def _clear_cart_quietly(customer_id: UUID) -> None:
-    try:
-        clients.clear_cart(customer_id)
-    except ServiceUnavailable:
-        logger.warning("cart clear failed", extra={"customer_id": str(customer_id)})

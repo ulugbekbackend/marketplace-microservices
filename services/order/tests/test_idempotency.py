@@ -8,6 +8,8 @@ import pytest
 import redis
 from rest_framework.test import APIClient
 
+from contracts.enums import EventType
+from messaging.models import Outbox
 from orders import idempotency
 from orders.models import Order
 from tests.conftest import ADDRESS, FakeUpstream, checkout, user_client
@@ -48,7 +50,7 @@ def test_same_key_and_body_replays_the_first_response(
     assert second.json() == first.json()
     assert second["Idempotent-Replayed"] == "true"
     assert Order.objects.count() == 1
-    assert upstream.count("POST", "/reservations/") == 1
+    assert Outbox.objects.filter(event_type=EventType.ORDER_CREATED.value).count() == 1
     ttl = redis_client.ttl(f"order:idem:{customer_id}:abc")
     assert 0 < ttl <= 24 * 3600
     assert not redis_client.exists(f"order:idem:{customer_id}:abc:lock")
