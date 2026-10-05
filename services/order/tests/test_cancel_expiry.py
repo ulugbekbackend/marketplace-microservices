@@ -7,11 +7,11 @@ the stock when it consumes them, so no HTTP call to the catalog is expected here
 from datetime import datetime, timedelta
 from io import StringIO
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from django.conf import settings
-from django.core.management import call_command
+from django.core.management import CommandError, call_command
 from django.utils import timezone
 from rest_framework.test import APIClient
 
@@ -152,6 +152,35 @@ def test_command_expires_in_batches() -> None:
 
     assert "expired 3 order(s)" in out.getvalue()
     assert {o.status for o in Order.objects.filter(id__in=[o.id for o in late])} == {"EXPIRED"}
+
+
+def test_command_expires_one_order_before_its_deadline() -> None:
+    target = make_order(reserved_until=timezone.now() + timedelta(minutes=10))
+    other = make_order(reserved_until=timezone.now() + timedelta(minutes=10))
+    out = StringIO()
+
+    call_command("expire_orders", "--order", str(target.id), stdout=out)
+
+    assert f"expired order {target.id}" in out.getvalue()
+    assert Order.objects.get(id=target.id).status == OrderStatus.EXPIRED.value
+    assert Order.objects.get(id=other.id).status == OrderStatus.RESERVED.value
+    assert [
+        OrderExpired.model_validate(e.payload).order_id for e in outbox(EventType.ORDER_EXPIRED)
+    ] == [target.id]
+
+
+@pytest.mark.parametrize("status", [OrderStatus.PENDING, OrderStatus.PAID, OrderStatus.CANCELLED])
+def test_command_refuses_orders_that_are_not_reserved(status: OrderStatus) -> None:
+    order = make_order(status=status)
+    with pytest.raises(CommandError, match="is not reserved"):
+        call_command("expire_orders", "--order", str(order.id))
+    assert Order.objects.get(id=order.id).status == status.value
+
+
+def test_command_reports_an_unknown_order() -> None:
+    order_id = uuid4()
+    with pytest.raises(CommandError, match="not found"):
+        call_command("expire_orders", "--order", str(order_id))
 
 
 def test_beat_runs_the_expiry_task_every_30_seconds() -> None:
