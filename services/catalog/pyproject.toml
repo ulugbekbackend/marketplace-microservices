@@ -18,7 +18,7 @@ dependencies = [
     "celery[redis]==5.6.3",
     "redis==8.1.0",
     "unidecode==1.4.0",
-    "py-common[drf]",
+    "py-common[drf,rabbit]",
 ]
 
 [dependency-groups]
@@ -47,7 +47,7 @@ module = ["tests.*"]
 disallow_untyped_defs = false
 
 [[tool.mypy.overrides]]
-module = ["decouple", "drf_spectacular.*", "mptt.*", "django_filters.*", "celery.*"]
+module = ["decouple", "drf_spectacular.*", "mptt.*", "django_filters.*", "celery.*", "pika", "pika.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

@@ -1,9 +1,10 @@
-import { useProducts, useShop } from '@bozorcha/api-client'
+import { useSearch, useShop } from '@bozorcha/api-client'
 import { Card, EmptyState, Pagination, Skeleton } from '@bozorcha/ui'
 import { PackageOpen } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useParams, useSearchParams } from 'react-router'
 import { Breadcrumbs } from '../components/Breadcrumbs'
+import { SearchError } from '../components/catalog/SearchError'
 import { ProductGrid } from '../components/ProductGrid'
 import { QueryError } from '../components/QueryError'
 import { isNotFound } from '../lib/errors'
@@ -19,8 +20,9 @@ export function ShopPage() {
   const [searchParams] = useSearchParams()
   const page = Math.max(1, Number.parseInt(searchParams.get('page') ?? '1', 10) || 1)
   const shop = useShop(slug)
-  const products = useProducts(
-    { seller: slug, page, page_size: PAGE_SIZE },
+  // The search filters by seller id, which the shop lookup by slug provides.
+  const products = useSearch(
+    { seller: shop.data?.id, sort: 'newest', page, page_size: PAGE_SIZE },
     { enabled: shop.isSuccess },
   )
 
@@ -77,7 +79,7 @@ export function ShopPage() {
           {shop.isPending || products.isPending ? (
             <ProductGrid loading layout="wide" skeletonCount={10} />
           ) : products.isError ? (
-            <QueryError
+            <SearchError
               error={products.error}
               onRetry={() => void products.refetch()}
               retrying={products.isRefetching}

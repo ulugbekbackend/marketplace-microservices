@@ -1,13 +1,14 @@
 """Background work of the catalog worker."""
 
 import logging
+from datetime import timedelta
 from uuid import UUID
 
 from botocore.exceptions import BotoCoreError, ClientError
 from celery import Task, shared_task
 from django.conf import settings
 
-from products import storage
+from products import stock, storage
 from products.images import InvalidImageError, render_webp
 from products.models import ImageStatus, ProductImage
 from products.services import (
@@ -84,3 +85,14 @@ def _retry_or_fail(task: Task, image_id: UUID, exc: Exception) -> str:
         fail_image(image_id, "storage unavailable")
         return ImageStatus.FAILED.value
     raise task.retry(exc=exc, countdown=RETRY_DELAYS_SECONDS[retries])
+
+
+@shared_task(acks_late=True)
+def release_stale_reservations() -> int:
+    """Beat safety sweep: give back stock an order kept past its expiry (lost event)."""
+    released = stock.release_stale(
+        grace=timedelta(seconds=settings.STALE_RESERVATION_GRACE_SECONDS)
+    )
+    if released:
+        logger.warning("released stale reservations", extra={"orders": released})
+    return released

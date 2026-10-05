@@ -179,7 +179,7 @@
     "/api/orders/{order_id}/pay/mock/": {
       "post": {
         "operationId": "orders_pay_mock",
-        "description": "Exists only when PAYMENT_MOCK_ENABLED and DEBUG are on; 404 otherwise.",
+        "description": "Takes the same path as a payment.paid event from a provider. Exists only when PAYMENT_MOCK_ENABLED and DEBUG are on; 404 otherwise.",
         "summary": "Pay an order without a provider (development only)",
         "parameters": [
           {
@@ -237,7 +237,7 @@
                 }
               }
             },
-            "description": "INVALID_TRANSITION, ORDER_EXPIRED, NOT_RESERVED"
+            "description": "NOT_RESERVED: still PENDING, try again shortly; ORDER_EXPIRED; INVALID_TRANSITION: cancelled or refunded"
           },
           "503": {
             "content": {
@@ -247,7 +247,7 @@
                 }
               }
             },
-            "description": "SERVICE_UNAVAILABLE: catalog did not answer"
+            "description": "SERVICE_UNAVAILABLE: catalog did not answer (commission rates)"
           }
         }
       }
@@ -310,7 +310,7 @@
     "/api/orders/checkout/": {
       "post": {
         "operationId": "orders_checkout",
-        "description": "Snapshots current catalog prices, creates the order and reserves its stock. The answer carries the order id and its status (RESERVED, or CANCELLED when the stock could not be held); poll the status endpoint afterwards. Retries with the same Idempotency-Key and body replay the first answer.",
+        "description": "Snapshots current catalog prices and creates a PENDING order; the catalog reserves its stock asynchronously. Poll the status endpoint: PENDING turns into RESERVED (pay before reserved_until) or CANCELLED with cancel_reason OUT_OF_STOCK when the stock could not be held. Retries with the same Idempotency-Key and body replay the first answer.",
         "summary": "Create an order from the cart",
         "parameters": [
           {
@@ -891,6 +891,10 @@
             "readOnly": true,
             "nullable": true
           },
+          "late_payment": {
+            "type": "boolean",
+            "readOnly": true
+          },
           "cancel_reason": {
             "type": "string",
             "readOnly": true
@@ -925,6 +929,7 @@
           "delivery_address",
           "history",
           "id",
+          "late_payment",
           "reserved_until",
           "sellers",
           "status",

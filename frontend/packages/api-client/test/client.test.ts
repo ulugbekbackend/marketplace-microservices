@@ -43,6 +43,11 @@ describe('request basics', () => {
     expect(buildUrl(`${BASE}/`, '/api/x/')).toBe(`${BASE}/api/x/`)
   })
 
+  it('repeats the key for array values and skips their empty items', () => {
+    const url = new URL(buildUrl(BASE, '/api/search', { 'attr[color]': ['red', '', 'blue'] }))
+    expect(url.searchParams.getAll('attr[color]')).toEqual(['red', 'blue'])
+  })
+
   it('sends JSON with the bearer token and parses the response', async () => {
     const { client, server } = setup(
       { [`GET ${ME}`]: protectedRoute(() => 'a1') },

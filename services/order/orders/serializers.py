@@ -136,6 +136,7 @@ class OrderDetailSerializer(serializers.ModelSerializer[Order]):
             "total_tiyin",
             "delivery_address",
             "reserved_until",
+            "late_payment",
             "cancel_reason",
             "created_at",
             "updated_at",

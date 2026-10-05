@@ -1,13 +1,12 @@
 """Synchronous clients for the cart and catalog internal APIs.
 
-Any network failure, 5xx or malformed answer becomes ``ServiceUnavailable`` (API 503).
-Business refusals (out of stock, nothing to commit) are returned or raised as typed
-results so the use cases decide what they mean.
+Only reads and the cart clean-up are synchronous; stock reservation travels as events
+(``order.created`` -> ``stock.reserved`` / ``stock.failed``). Any network failure, 5xx or
+malformed answer becomes ``ServiceUnavailable`` (API 503).
 """
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
 from uuid import UUID
@@ -38,10 +37,6 @@ class ServiceUnavailable(ApiError):
         self.service = service
 
 
-class NotReserved(Exception):
-    """The catalog holds no stock for the order, so there is nothing to commit."""
-
-
 @dataclass(frozen=True, slots=True)
 class CartLine:
     variant_id: UUID
@@ -60,17 +55,6 @@ class VariantInfo:
     shop_name: str
     commission_rate: Decimal
     image_url: str | None
-
-
-@dataclass(frozen=True, slots=True)
-class Reserved:
-    expires_at: datetime
-
-
-@dataclass(frozen=True, slots=True)
-class ReserveRejected:
-    code: str  # "OUT_OF_STOCK"
-    variant_ids: list[UUID]
 
 
 def _client(base_url: str) -> httpx.Client:
@@ -101,15 +85,6 @@ def _json(service: str, response: httpx.Response) -> Any:
     try:
         return response.json()
     except ValueError as exc:
-        raise ServiceUnavailable(service) from exc
-
-
-def _error_code(service: str, response: httpx.Response) -> tuple[str, dict[str, Any]]:
-    body = _json(service, response)
-    try:
-        error = body["error"]
-        return str(error["code"]), dict(error.get("details") or {})
-    except (KeyError, TypeError, ValueError) as exc:
         raise ServiceUnavailable(service) from exc
 
 
@@ -177,56 +152,3 @@ def _variant_info(item: dict[str, Any]) -> VariantInfo:
         commission_rate=Decimal(str(item["commission_rate"])),
         image_url=item.get("image_url") or None,
     )
-
-
-def reserve(order_id: UUID, items: Iterable[tuple[UUID, int]]) -> Reserved | ReserveRejected:
-    """Hold stock for every item or none. A 409 comes back as ``ReserveRejected``."""
-    response = _call(
-        CATALOG,
-        settings.CATALOG_INTERNAL_URL,
-        "POST",
-        "/internal/catalog/reservations/",
-        {
-            "order_id": str(order_id),
-            "items": [{"variant_id": str(variant_id), "qty": qty} for variant_id, qty in items],
-        },
-    )
-    if response.status_code == httpx.codes.CONFLICT:
-        code, details = _error_code(CATALOG, response)
-        try:
-            variant_ids = [UUID(str(value)) for value in details.get("variant_ids", [])]
-        except ValueError as exc:
-            raise ServiceUnavailable(CATALOG) from exc
-        return ReserveRejected(code, variant_ids)
-    _expect_ok(CATALOG, response)
-    body = _json(CATALOG, response)
-    try:
-        return Reserved(datetime.fromisoformat(str(body["expires_at"])))
-    except (KeyError, TypeError, ValueError) as exc:
-        raise ServiceUnavailable(CATALOG) from exc
-
-
-def commit(order_id: UUID) -> None:
-    """The order is paid: reserved units leave the stock. Idempotent on the catalog side."""
-    response = _call(
-        CATALOG,
-        settings.CATALOG_INTERNAL_URL,
-        "POST",
-        f"/internal/catalog/reservations/{order_id}/commit/",
-    )
-    if response.status_code == httpx.codes.CONFLICT:
-        code, _ = _error_code(CATALOG, response)
-        if code == "NOT_RESERVED":
-            raise NotReserved(str(order_id))
-    _expect_ok(CATALOG, response)
-
-
-def release(order_id: UUID) -> None:
-    """Give reserved units back. Idempotent on the catalog side."""
-    response = _call(
-        CATALOG,
-        settings.CATALOG_INTERNAL_URL,
-        "POST",
-        f"/internal/catalog/reservations/{order_id}/release/",
-    )
-    _expect_ok(CATALOG, response)

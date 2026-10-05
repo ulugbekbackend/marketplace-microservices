@@ -1,4 +1,4 @@
-import type { ApiClient } from './client'
+import type { ApiClient, Query } from './client'
 import type {
   Attribute,
   Cart,
@@ -22,6 +22,8 @@ import type {
   ProductListItem,
   ProductListParams,
   ProductUpdateRequest,
+  SearchParams,
+  SearchResponse,
   SellerApplication,
   SellerApplyRequest,
   SellerOrderListParams,
@@ -36,6 +38,7 @@ import type {
   Shop,
   StockUpdateRequest,
   SubOrderStatusChangeRequest,
+  SuggestResponse,
   User,
   UserUpdateRequest,
   Uuid,
@@ -221,5 +224,31 @@ export function sellerOrderEndpoints(client: ApiClient) {
       client.patch<SellerSubOrderDetail>(`${base}/${seg(subOrderId)}/status/`, body),
 
     stats: (signal?: AbortSignal) => client.get<SellerStats>(`${base}/stats/`, { signal }),
+  }
+}
+
+/**
+ * Search filters as a query string. `attr` becomes one `attr[<code>]` key per code, repeated
+ * once per value; codes and values are sorted so equal filters give the same URL.
+ */
+export function searchQuery({ attr, ...params }: SearchParams): Query {
+  const query: Query = { ...params }
+  for (const code of Object.keys(attr ?? {}).sort()) {
+    const values = [...new Set(attr![code])].filter(Boolean).sort()
+    if (values.length > 0) query[`attr[${code}]`] = values
+  }
+  return query
+}
+
+/** Product search (the shop's listings) and search box suggestions. */
+export function searchEndpoints(client: ApiClient) {
+  return {
+    /** 400 `VALIDATION_ERROR` for bad filters, 503 `SEARCH_UNAVAILABLE` when the index is down. */
+    search: (params: SearchParams = {}, signal?: AbortSignal) =>
+      client.get<SearchResponse>('/api/search', { query: searchQuery(params), signal }),
+
+    /** Up to 8 titles; empty for queries shorter than 2 characters. */
+    suggest: (q: string, signal?: AbortSignal) =>
+      client.get<SuggestResponse>('/api/search/suggest', { query: { q }, signal }),
   }
 }

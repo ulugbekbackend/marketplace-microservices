@@ -14,6 +14,7 @@ const baseOrder: Order = {
   id: 'a1b2c3d4-0000-4000-8000-000000000001',
   status: 'RESERVED',
   reserved_until: iso(NOW + 15 * 60_000),
+  late_payment: false,
   total_tiyin: 300_000_00,
   cancel_reason: '',
   created_at: iso(NOW - 1000),
@@ -354,5 +355,94 @@ describe('OrderPage', () => {
     const { router } = setup({}, false)
     await waitFor(() => expect(router.state.location.pathname).toBe('/login'))
     expect(router.state.location.search).toBe(`?next=${encodeURIComponent(`/orders/${ID}`)}`)
+  })
+
+  it('asks to wait when the mock payment finds the order not reserved yet', async () => {
+    const u = userEvent.setup()
+    const reserved = withStatus('RESERVED')
+    setup({
+      [`GET ${DETAIL}`]: () => json(200, reserved),
+      [`GET ${STATUS}`]: statusOf(reserved),
+      [`POST /api/orders/${ID}/pay/mock/`]: () => apiError(409, 'NOT_RESERVED'),
+    })
+    await u.click(await screen.findByRole('button', { name: "To'lash (test)" }))
+    expect(
+      await screen.findByText(
+        "Mahsulotlar hali band qilinmoqda. Bir necha soniyadan keyin qayta urinib ko'ring.",
+      ),
+    ).toBeInTheDocument()
+    // still offered: the next try succeeds once the reservation lands
+    expect(screen.getByRole('button', { name: "To'lash (test)" })).toBeInTheDocument()
+  })
+
+  it('shows a late payment as waiting and keeps polling until it settles', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(NOW)
+    const late = withStatus('EXPIRED', { late_payment: true })
+    const paid = withStatus('PAID', {
+      late_payment: true,
+      history: [
+        ...baseOrder.history,
+        {
+          from_status: 'RESERVED',
+          to_status: 'EXPIRED',
+          reason: 'RESERVATION_EXPIRED',
+          created_at: iso(NOW + 1000),
+        },
+        {
+          from_status: 'EXPIRED',
+          to_status: 'PAID',
+          reason: 'LATE_PAYMENT',
+          created_at: iso(NOW + 2000),
+        },
+      ],
+    })
+    let settled = false
+    setup({
+      [`GET ${DETAIL}`]: () => json(200, settled ? paid : late),
+      [`GET ${STATUS}`]: () =>
+        json(200, { status: settled ? 'PAID' : 'EXPIRED', reserved_until: null }),
+    })
+    expect(
+      await screen.findByText("To'lov keldi, mahsulotlar qayta band qilinmoqda"),
+    ).toBeInTheDocument()
+    expect(screen.queryByText("To'lov vaqti tugadi")).not.toBeInTheDocument()
+
+    settled = true
+    await act(() => vi.advanceTimersByTimeAsync(2100))
+    expect(await screen.findByText("To'lov qabul qilindi")).toBeInTheDocument()
+    const history = screen.getByRole('list', { name: 'Buyurtma tarixi' })
+    expect(
+      within(history).getByText("To'lov muddatdan keyin keldi, mahsulotlar qayta band qilindi."),
+    ).toBeInTheDocument()
+  })
+
+  it('explains a refund of a late payment whose items ran out', async () => {
+    const refunded = withStatus('REFUNDED', {
+      late_payment: true,
+      history: [
+        ...baseOrder.history,
+        {
+          from_status: 'RESERVED',
+          to_status: 'EXPIRED',
+          reason: 'RESERVATION_EXPIRED',
+          created_at: iso(NOW + 1000),
+        },
+        {
+          from_status: 'EXPIRED',
+          to_status: 'REFUNDED',
+          reason: 'LATE_PAYMENT_OUT_OF_STOCK',
+          created_at: iso(NOW + 2000),
+        },
+      ],
+    })
+    setup({ [`GET ${DETAIL}`]: () => json(200, refunded), [`GET ${STATUS}`]: statusOf(refunded) })
+    const text =
+      "To'lov muddatdan keyin keldi, bu orada mahsulotlar tugagan. Pul to'liq qaytariladi."
+    const panel = await screen.findByTestId('status-panel')
+    expect(within(panel).getByText(text)).toBeInTheDocument()
+    expect(
+      within(screen.getByRole('list', { name: 'Buyurtma tarixi' })).getByText(text),
+    ).toBeInTheDocument()
   })
 })

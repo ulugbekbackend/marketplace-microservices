@@ -44,6 +44,9 @@ class JsonFormatter(logging.Formatter):
         return json.dumps(payload, ensure_ascii=False, default=str)
 
 
+NOISY_LOGGERS = ("pika", "aio_pika", "aiormq")
+
+
 def configure_logging(service: str, level: str = "INFO") -> None:
     """Send JSON logs to stdout, replacing any handlers configured before."""
     handler = logging.StreamHandler(sys.stdout)
@@ -51,3 +54,6 @@ def configure_logging(service: str, level: str = "INFO") -> None:
     root = logging.getLogger()
     root.handlers = [handler]
     root.setLevel(level.upper())
+    # Broker clients log every connection step at INFO; their warnings are what matters.
+    for noisy in NOISY_LOGGERS:
+        logging.getLogger(noisy).setLevel(logging.WARNING)

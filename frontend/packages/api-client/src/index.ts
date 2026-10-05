@@ -14,6 +14,8 @@ export {
   cartEndpoints,
   catalogEndpoints,
   orderEndpoints,
+  searchEndpoints,
+  searchQuery,
   sellerCatalogEndpoints,
   sellerOrderEndpoints,
 } from './endpoints'
@@ -38,6 +40,7 @@ export { REFRESH_TOKEN_KEY, TokenStore, type TokenSnapshot, type TokenStorage } 
 export * from './types'
 
 export { useCategories, useProduct, useProducts, useShop } from './hooks/catalog'
+export { SUGGEST_MIN_LENGTH, useSearch, useSuggest } from './hooks/search'
 export { useLogout, useMe, useSendOtp, useUpdateMe, useVerifyOtp } from './hooks/auth'
 export {
   EMPTY_CART,

@@ -21,7 +21,7 @@ keys: ## Create the RS256 key pair auth signs tokens with (kept out of git)
 up: keys ## Start the stack (infrastructure + services)
 	$(COMPOSE) up -d --build
 
-up-full: keys ## Start everything including search and monitoring profiles
+up-full: keys ## Start everything including the monitoring profile
 	$(COMPOSE) --profile full --profile search --profile monitoring up -d --build
 
 down: ## Stop the stack and remove containers
@@ -84,7 +84,7 @@ API_SCHEMAS := frontend/packages/api-client/openapi
 
 gen-api: ## Export OpenAPI schemas and regenerate the frontend API types
 	@for s in auth catalog order; do 		(cd services/$$s && uv run --project . python manage.py spectacular 			--format openapi-json --file ../../$(API_SCHEMAS)/$$s.json) || exit 1; 	done
-	@for s in cart; do 		(cd services/$$s && uv run --project . python -c "import json; from app.main import app; print(json.dumps(app.openapi(), indent=2))" > ../../$(API_SCHEMAS)/$$s.json) || exit 1; 	done
+	@for s in cart search; do 		(cd services/$$s && uv run --project . python -c "import json; from app.main import app; print(json.dumps(app.openapi(), indent=2))" > ../../$(API_SCHEMAS)/$$s.json) || exit 1; 	done
 	cd frontend && pnpm gen-api
 
 gen-rabbit: ## Regenerate the broker topology from the contracts

@@ -13,7 +13,8 @@ const NO_REFRESH_PATHS = [REFRESH_PATH, '/api/auth/otp/send/', '/api/auth/otp/ve
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
 
 export type QueryValue = string | number | boolean | null | undefined
-export type Query = Record<string, QueryValue>
+/** An array value repeats the key once per item (`attr[color]=red&attr[color]=blue`). */
+export type Query = Record<string, QueryValue | readonly QueryValue[]>
 
 export type RequestOptions = {
   query?: Query
@@ -52,9 +53,12 @@ export type ApiClient = {
 export function buildUrl(baseUrl: string, path: string, query?: Query): string {
   const url = new URL(path, baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`)
   if (query) {
-    for (const [key, value] of Object.entries(query)) {
-      if (value === undefined || value === null || value === '') continue
-      url.searchParams.set(key, String(value))
+    for (const [key, raw] of Object.entries(query)) {
+      const values: readonly QueryValue[] = Array.isArray(raw) ? raw : [raw as QueryValue]
+      for (const value of values) {
+        if (value === undefined || value === null || value === '') continue
+        url.searchParams.append(key, String(value))
+      }
     }
   }
   return url.toString()

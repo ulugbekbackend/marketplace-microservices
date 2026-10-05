@@ -173,7 +173,6 @@ services:
 
   elasticsearch:
     image: elasticsearch:8.19.21
-    profiles: [search, full]
     environment:
       discovery.type: single-node
       xpack.security.enabled: "false"
@@ -218,6 +217,17 @@ services:
       - traefik.http.routers.auth-private.service=auth
       - traefik.http.services.auth.loadbalancer.server.port=8000
 
+  auth-relay:
+    <<: *service-env
+    build:
+      <<: *python-build
+      dockerfile: services/auth/Dockerfile
+    command: ["python", "manage.py", "relay_outbox"]
+    depends_on:
+      auth: {condition: service_healthy}
+      rabbitmq-init: {condition: service_completed_successfully}
+    healthcheck: {disable: true}
+
   catalog:
     <<: *service-env
     build:
@@ -246,15 +256,37 @@ services:
     build:
       <<: *python-build
       dockerfile: services/catalog/Dockerfile
-    command: ["celery", "-A", "config", "worker", "--loglevel=INFO", "--concurrency=2"]
+    command: ["celery", "-A", "config", "worker", "--beat", "--loglevel=INFO", "--concurrency=2"]
     depends_on:
       catalog: {condition: service_healthy}
     healthcheck:
-      test: ["CMD-SHELL", "celery -A config inspect ping --timeout 5 | grep -q pong"]
+      test: ["CMD-SHELL", "celery -A config inspect ping -d celery@$$HOSTNAME --timeout 5 | grep -q pong"]
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 20s
+
+  catalog-relay:
+    <<: *service-env
+    build:
+      <<: *python-build
+      dockerfile: services/catalog/Dockerfile
+    command: ["python", "manage.py", "relay_outbox"]
+    depends_on:
+      catalog: {condition: service_healthy}
+      rabbitmq-init: {condition: service_completed_successfully}
+    healthcheck: {disable: true}
+
+  catalog-consumer:
+    <<: *service-env
+    build:
+      <<: *python-build
+      dockerfile: services/catalog/Dockerfile
+    command: ["python", "manage.py", "consume_events"]
+    depends_on:
+      catalog: {condition: service_healthy}
+      rabbitmq-init: {condition: service_completed_successfully}
+    healthcheck: {disable: true}
 
   order:
     <<: *service-env
@@ -277,6 +309,44 @@ services:
       - traefik.http.routers.order-health.middlewares=cors@file
       - traefik.http.routers.order-health.service=order
       - traefik.http.services.order.loadbalancer.server.port=8000
+
+  order-relay:
+    <<: *service-env
+    build:
+      <<: *python-build
+      dockerfile: services/order/Dockerfile
+    command: ["python", "manage.py", "relay_outbox"]
+    depends_on:
+      order: {condition: service_healthy}
+      rabbitmq-init: {condition: service_completed_successfully}
+    healthcheck: {disable: true}
+
+  order-consumer:
+    <<: *service-env
+    build:
+      <<: *python-build
+      dockerfile: services/order/Dockerfile
+    command: ["python", "manage.py", "consume_events"]
+    depends_on:
+      order: {condition: service_healthy}
+      rabbitmq-init: {condition: service_completed_successfully}
+    healthcheck: {disable: true}
+
+  order-worker:
+    <<: *service-env
+    build:
+      <<: *python-build
+      dockerfile: services/order/Dockerfile
+    # One process runs the beat schedule (expiry every 30 s) and executes the tasks.
+    command: ["celery", "-A", "config", "worker", "--beat", "--loglevel=INFO", "--concurrency=1"]
+    depends_on:
+      order: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A config inspect ping -d celery@$$HOSTNAME --timeout 5 | grep -q pong"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
 
   cart:
     <<: *service-env
@@ -302,7 +372,10 @@ services:
       <<: *python-build
       dockerfile: services/search/Dockerfile
     depends_on:
+      elasticsearch: {condition: service_healthy}
+      redis: {condition: service_healthy}
       rabbitmq: {condition: service_healthy}
+      rabbitmq-init: {condition: service_completed_successfully}
     healthcheck: *python-healthcheck
     labels:
       - traefik.enable=true

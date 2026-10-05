@@ -35,6 +35,7 @@ const order = (status: OrderStatus, reservedUntil: string | null = null): Order 
   id: 'o1',
   status,
   reserved_until: reservedUntil,
+  late_payment: false,
   total_tiyin: 100_000_00,
   cancel_reason: '',
   created_at: '2026-09-27T10:00:00Z',

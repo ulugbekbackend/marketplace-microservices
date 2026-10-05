@@ -86,6 +86,34 @@ CART_INTERNAL_URL = config("CART_INTERNAL_URL", default="http://cart:8000")
 CATALOG_INTERNAL_URL = config("CATALOG_INTERNAL_URL", default="http://catalog:8000")
 INTERNAL_HTTP_TIMEOUT_SECONDS = config("INTERNAL_HTTP_TIMEOUT_SECONDS", default=3.0, cast=float)
 
+# RabbitMQ: the outbox relay publishes to it, the consumer reads order.q from it.
+RABBITMQ_URL = config("RABBITMQ_URL", default="amqp://rabbitmq:5672/")
+OUTBOX_RELAY_INTERVAL_SECONDS = config("OUTBOX_RELAY_INTERVAL_SECONDS", default=1.0, cast=float)
+OUTBOX_RELAY_BATCH_SIZE = config("OUTBOX_RELAY_BATCH_SIZE", default=100, cast=int)
+
+# Celery: Redis db 1 as the broker, results are not stored. The broker is shared with the
+# catalog worker, so order tasks travel on their own queue.
+CELERY_BROKER_URL = config("CELERY_BROKER_URL", default="redis://redis:6379/1")
+CELERY_TASK_DEFAULT_QUEUE = "order"
+CELERY_TASK_IGNORE_RESULT = True
+CELERY_TASK_ACKS_LATE = True
+CELERY_TASK_REJECT_ON_WORKER_LOST = True
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+CELERY_TASK_SERIALIZER = "json"
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+CELERY_TIMEZONE = "UTC"
+# Overdue RESERVED orders become EXPIRED (and release their stock) on this schedule.
+ORDER_EXPIRY_INTERVAL_SECONDS = config("ORDER_EXPIRY_INTERVAL_SECONDS", default=30.0, cast=float)
+CELERY_BEAT_SCHEDULE: dict[str, dict[str, object]] = {
+    "expire-overdue-orders": {
+        "task": "orders.expire_overdue_orders",
+        "schedule": ORDER_EXPIRY_INTERVAL_SECONDS,
+        # A run that waited longer than one interval is superseded by the next one.
+        "options": {"expires": ORDER_EXPIRY_INTERVAL_SECONDS},
+    }
+}
+
 # The mock payment endpoint exists only when this is on AND DEBUG is on.
 PAYMENT_MOCK_ENABLED = config("PAYMENT_MOCK_ENABLED", default=False, cast=bool)
 

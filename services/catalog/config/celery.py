@@ -1,4 +1,5 @@
-"""Celery application: image processing runs here (compose service catalog-worker)."""
+"""Celery application: image processing and the stale reservation sweep (beat) run here
+(compose service catalog-worker, started with --beat)."""
 
 import os
 

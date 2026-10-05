@@ -13,7 +13,8 @@ dependencies = [
     "prometheus-client==0.26.0",
     "httpx==0.28.1",
     "redis==8.1.0",
-    "py-common[drf,redis]",
+    "celery[redis]==5.6.3",
+    "py-common[drf,redis,rabbit]",
 ]
 
 [dependency-groups]
@@ -42,7 +43,7 @@ module = ["tests.*"]
 disallow_untyped_defs = false
 
 [[tool.mypy.overrides]]
-module = ["decouple", "drf_spectacular.*"]
+module = ["decouple", "drf_spectacular.*", "pika", "pika.*", "celery.*"]
 ignore_missing_imports = true
 
 [tool.django-stubs]

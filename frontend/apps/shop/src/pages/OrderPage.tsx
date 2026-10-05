@@ -43,8 +43,15 @@ import { QueryError } from '../components/QueryError'
 import { RequireAuth } from '../components/RequireAuth'
 import { formatDateTime } from '../lib/dates'
 import { isNotFound } from '../lib/errors'
-import { orderErrorMessage } from '../lib/orderErrors'
-import { isCancellable, knownReason, MOCK_PAYMENT_ENABLED, orderNumber } from '../lib/orders'
+import { orderErrorKey, orderErrorMessage } from '../lib/orderErrors'
+import {
+  awaitsLateReservation,
+  isCancellable,
+  knownReason,
+  lastReasonFor,
+  MOCK_PAYMENT_ENABLED,
+  orderNumber,
+} from '../lib/orders'
 import { NotFoundPage } from './NotFoundPage'
 
 /** Under this many seconds the countdown turns red (design system CountdownTimer rule). */
@@ -129,9 +136,23 @@ function OrderView({ order }: { order: Order }) {
 
 function StatusPanel({ order }: { order: Order }) {
   const { t } = useTranslation()
-  // Polls while PENDING, and while RESERVED past the deadline, until the server settles it.
-  const status = useOrderStatus(order.id)
+  // Polls while PENDING, while RESERVED past the deadline and while a late payment waits for
+  // stock, until the server settles it.
+  const lateReservation = awaitsLateReservation(order)
+  const status = useOrderStatus(order.id, { poll: lateReservation })
   const reason = knownReason(order.cancel_reason)
+
+  if (lateReservation) {
+    return (
+      <Panel
+        tone="info"
+        icon={<Spinner />}
+        title={t('orders.latePaymentTitle')}
+        hint={t('orders.latePaymentHint')}
+        live
+      />
+    )
+  }
 
   switch (order.status) {
     case 'PENDING':
@@ -189,15 +210,22 @@ function StatusPanel({ order }: { order: Order }) {
           live
         />
       )
-    case 'REFUNDED':
+    case 'REFUNDED': {
+      const refundReason = lastReasonFor(order.history, 'REFUNDED')
       return (
         <Panel
           tone="info"
           icon={<RotateCcw size={22} strokeWidth={1.75} />}
           title={t('orders.refundedTitle')}
-          hint={t('orders.refundedHint')}
+          hint={
+            refundReason === 'LATE_PAYMENT_OUT_OF_STOCK'
+              ? t('orders.reason.LATE_PAYMENT_OUT_OF_STOCK')
+              : t('orders.refundedHint')
+          }
+          live
         />
       )
+    }
   }
 }
 
@@ -345,6 +373,9 @@ function PayButton({ order }: { order: Order }) {
               if (isApiError(error) && error.status === 404) {
                 setUnavailable(true)
                 toast({ title: t('orders.mockDisabled'), tone: 'info' })
+              } else if (orderErrorKey(error) === 'NOT_RESERVED') {
+                // Still PENDING: the reservation lands in a moment and polling picks it up.
+                toast({ title: orderErrorMessage(t, error), tone: 'info' })
               } else {
                 toast({ title: orderErrorMessage(t, error), tone: 'danger' })
               }

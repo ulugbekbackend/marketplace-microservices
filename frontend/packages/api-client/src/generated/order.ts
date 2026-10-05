@@ -60,7 +60,7 @@ export type paths = {
     put?: never
     /**
      * Pay an order without a provider (development only)
-     * @description Exists only when PAYMENT_MOCK_ENABLED and DEBUG are on; 404 otherwise.
+     * @description Takes the same path as a payment.paid event from a provider. Exists only when PAYMENT_MOCK_ENABLED and DEBUG are on; 404 otherwise.
      */
     post: operations['orders_pay_mock']
     delete?: never
@@ -97,7 +97,7 @@ export type paths = {
     put?: never
     /**
      * Create an order from the cart
-     * @description Snapshots current catalog prices, creates the order and reserves its stock. The answer carries the order id and its status (RESERVED, or CANCELLED when the stock could not be held); poll the status endpoint afterwards. Retries with the same Idempotency-Key and body replay the first answer.
+     * @description Snapshots current catalog prices and creates a PENDING order; the catalog reserves its stock asynchronously. Poll the status endpoint: PENDING turns into RESERVED (pay before reserved_until) or CANCELLED with cancel_reason OUT_OF_STOCK when the stock could not be held. Retries with the same Idempotency-Key and body replay the first answer.
      */
     post: operations['orders_checkout']
     delete?: never
@@ -236,6 +236,7 @@ export type components = {
       history: components['schemas']['OrderHistory'][]
       /** Format: uuid */
       readonly id: string
+      readonly late_payment: boolean
       /** Format: date-time */
       readonly reserved_until: string | null
       readonly sellers: components['schemas']['SellerGroup'][]
@@ -600,7 +601,7 @@ export interface operations {
           'application/json': components['schemas']['Error']
         }
       }
-      /** @description INVALID_TRANSITION, ORDER_EXPIRED, NOT_RESERVED */
+      /** @description NOT_RESERVED: still PENDING, try again shortly; ORDER_EXPIRED; INVALID_TRANSITION: cancelled or refunded */
       409: {
         headers: {
           [name: string]: unknown
@@ -609,7 +610,7 @@ export interface operations {
           'application/json': components['schemas']['Error']
         }
       }
-      /** @description SERVICE_UNAVAILABLE: catalog did not answer */
+      /** @description SERVICE_UNAVAILABLE: catalog did not answer (commission rates) */
       503: {
         headers: {
           [name: string]: unknown

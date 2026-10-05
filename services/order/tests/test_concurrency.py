@@ -1,20 +1,24 @@
-"""Concurrency against real Postgres: row locks make payment and expiry safe to race."""
+"""Concurrency against real Postgres: row locks make payment, event delivery, expiry and
+the outbox relay safe to race."""
 
 import threading
+import time
 from collections.abc import Callable
 from datetime import timedelta
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from django.db import connection, connections, transaction
 from django.utils import timezone
 
-from contracts.enums import EventType, OrderStatus, SubOrderStatus, UserRole
-from messaging.models import Outbox
-from orders import services
+from contracts.enums import EventType, OrderStatus, PaymentProvider, SubOrderStatus, UserRole
+from contracts.events import EventEnvelope, OrderExpired, OrderItemRef, PaymentPaid, StockFailed
+from messaging.management.commands.relay_outbox import publish_batch
+from messaging.models import Outbox, ProcessedEvent
+from orders import saga, services
 from orders.models import Order, SubOrder, SubOrderStatusHistory
-from tests.conftest import FakeUpstream, user_client
+from tests.conftest import FakeUpstream, incoming, known_variants, user_client
 from tests.factories import make_order, make_paid_order, make_sub_order
 
 pytestmark = pytest.mark.django_db(transaction=True)
@@ -41,23 +45,67 @@ def run_in_threads(target: Callable[[], Any], count: int) -> list[BaseException]
     return errors
 
 
-def known_variants(upstream: FakeUpstream, order: Order) -> None:
-    for item in order.items.all():
-        template = upstream.variants[upstream.add_variant(seller_id=item.seller_id)]
-        upstream.variants[item.variant_id] = {**template, "variant_id": str(item.variant_id)}
+def ref() -> OrderItemRef:
+    return OrderItemRef(variant_id=uuid4(), qty=1)
 
 
 def test_concurrent_payments_split_the_order_once(upstream: FakeUpstream) -> None:
     order = make_order(lines=[(uuid4(), 1_000, 1), (uuid4(), 2_000, 2)])
     known_variants(upstream, order)
 
-    errors = run_in_threads(lambda: services.mark_paid(order.id), 4)
+    def pay() -> None:
+        saga.apply_payment(
+            PaymentPaid(
+                order_id=order.id,
+                transaction_id=uuid4(),
+                amount_tiyin=order.total_tiyin,
+                provider=PaymentProvider.MOCK,
+            )
+        )
+
+    errors = run_in_threads(pay, 4)
 
     assert errors == []
     order.refresh_from_db()
     assert order.status == OrderStatus.PAID.value
     assert SubOrder.objects.filter(order=order).count() == 2
     assert Outbox.objects.filter(event_type=EventType.ORDER_PAID.value).count() == 1
+
+
+def test_one_event_delivered_twice_in_parallel_is_handled_once() -> None:
+    order = make_order(status=OrderStatus.PENDING)
+    event = incoming(StockFailed(order_id=order.id, reason="OUT_OF_STOCK"))
+
+    errors = run_in_threads(lambda: saga.on_stock_failed(event), 3)
+
+    assert errors == []
+    assert ProcessedEvent.objects.filter(event_id=event.event_id).count() == 1
+    assert Outbox.objects.filter(event_type=EventType.ORDER_CANCELLED.value).count() == 1
+    assert order.history.filter(to_status=OrderStatus.CANCELLED.value).count() == 1
+
+
+def test_two_relays_never_publish_the_same_row() -> None:
+    with transaction.atomic():
+        for _ in range(30):
+            services.publish(make_order(), OrderExpired(order_id=uuid4(), items=[ref()]))
+    sent: list[UUID] = []
+    lock = threading.Lock()
+
+    class Slow:
+        def publish(self, envelope: EventEnvelope) -> None:
+            time.sleep(0.005)  # keep the batch lock while the other relay starts
+            with lock:
+                sent.append(envelope.event_id)
+
+    def relay() -> None:
+        while publish_batch(Slow(), limit=5):
+            pass
+
+    errors = run_in_threads(relay, 2)
+
+    assert errors == []
+    assert len(sent) == len(set(sent)) == 30
+    assert not Outbox.objects.filter(published_at__isnull=True).exists()
 
 
 def test_expiry_skips_orders_locked_by_someone_else(upstream: FakeUpstream) -> None:

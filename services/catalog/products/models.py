@@ -186,7 +186,7 @@ class VariantAttribute(models.Model):
 
 
 class StockReservation(models.Model):
-    """Stock held for an unpaid order. Reserve/commit/release logic arrives in P2."""
+    """Stock held for an unpaid order (logic in ``products.reservations``)."""
 
     id = models.UUIDField(primary_key=True, default=uuid7, editable=False)
     order_id = models.UUIDField()
@@ -200,6 +200,10 @@ class StockReservation(models.Model):
         default=ReservationStatus.ACTIVE.value,
     )
     expires_at = models.DateTimeField()
+    # When the order.created event that (re)reserved the row occurred, on the order
+    # service's clock: comparable with the occurred_at of order.expired / order.cancelled.
+    # Null on rows written before the column existed.
+    reserved_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

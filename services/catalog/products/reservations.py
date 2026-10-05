@@ -9,8 +9,7 @@ If any row does not match, the whole transaction rolls back and nothing is held.
 Variants are updated in id order so concurrent orders lock rows in the same order
 and cannot deadlock. Every operation is idempotent per ``order_id``.
 
-P2 calls these synchronously from the internal API; in P4 the event consumers call
-the same functions.
+The event consumers call these through ``products.stock``, which keeps search in step.
 """
 
 from collections import defaultdict
@@ -64,20 +63,27 @@ def normalize(items: Iterable[ReservationItem]) -> list[ReservationItem]:
     return [ReservationItem(variant_id, totals[variant_id]) for variant_id in sorted(totals)]
 
 
-def reserve(order_id: UUID, items: Iterable[ReservationItem]) -> Reserved | ReserveFailed:
+def reserve(
+    order_id: UUID, items: Iterable[ReservationItem], *, reserved_at: datetime | None = None
+) -> Reserved | ReserveFailed:
     """Hold stock for every item, or for none of them.
 
     A repeated call for an order that already holds (or has used) its stock returns the
     existing reservation. An order whose reservation was released (expired) reserves again
     — the late payment path.
+
+    ``reserved_at`` is when the reserving event occurred (see ``release``); now by default.
     """
     wanted = normalize(items)
+    stamp = reserved_at or timezone.now()
     try:
         with transaction.atomic():
             existing = _lock_rows(order_id)
             if any(row.status != RELEASED for row in existing):
+                _claim(existing, stamp)
                 return _as_reserved(order_id, existing)
-            return _reserve_all(order_id, wanted, {row.variant_id: row for row in existing})
+            released = {row.variant_id: row for row in existing}
+            return _reserve_all(order_id, wanted, released, stamp)
     except IntegrityError:
         # A concurrent call for the same order inserted its rows first; ours rolled back.
         with transaction.atomic():
@@ -101,10 +107,19 @@ def commit(order_id: UUID) -> list[ReservationItem]:
         return _items(active)
 
 
-def release(order_id: UUID) -> list[ReservationItem]:
-    """The order expired or was cancelled: give the units back. Returns what was freed."""
+def release(order_id: UUID, *, reserved_before: datetime | None = None) -> list[ReservationItem]:
+    """The order expired or was cancelled: give the units back. Returns what was freed.
+
+    With ``reserved_before`` (the occurred_at of the releasing event) only rows reserved
+    no later than that are freed: a late or retried ``order.expired`` must not free the
+    stock a late payment reserved again after the expiry.
+    """
     with transaction.atomic():
-        active = [row for row in _lock_rows(order_id) if row.status == ACTIVE]
+        active = [
+            row
+            for row in _lock_rows(order_id)
+            if row.status == ACTIVE and _reserved_by(row, reserved_before)
+        ]
         for row in active:
             _apply("reserved = reserved - %(qty)s", row.variant_id, row.qty)
         _set_status(active, RELEASED)
@@ -114,8 +129,30 @@ def release(order_id: UUID) -> list[ReservationItem]:
 # --- internals ---------------------------------------------------------------------------
 
 
+def _claim(rows: list[StockReservation], reserved_at: datetime) -> None:
+    """A later reserving event found the hold still active (a late payment processed
+    before the expiry it raced with): the hold now belongs to that event, so the older
+    ``order.expired`` no longer frees it. ``expires_at`` stays as it is."""
+    stale = [
+        row.pk
+        for row in rows
+        if row.status == ACTIVE and (row.reserved_at is None or row.reserved_at < reserved_at)
+    ]
+    if stale:
+        StockReservation.objects.filter(pk__in=stale).update(
+            reserved_at=reserved_at, updated_at=timezone.now()
+        )
+
+
+def _reserved_by(row: StockReservation, cutoff: datetime | None) -> bool:
+    return cutoff is None or row.reserved_at is None or row.reserved_at <= cutoff
+
+
 def _reserve_all(
-    order_id: UUID, wanted: list[ReservationItem], released: dict[UUID, StockReservation]
+    order_id: UUID,
+    wanted: list[ReservationItem],
+    released: dict[UUID, StockReservation],
+    reserved_at: datetime,
 ) -> Reserved | ReserveFailed:
     short = [item.variant_id for item in wanted if not _take(item)]
     if short:
@@ -132,10 +169,12 @@ def _reserve_all(
                 qty=item.qty,
                 status=ACTIVE,
                 expires_at=expires_at,
+                reserved_at=reserved_at,
             )
         else:
             row.qty, row.status, row.expires_at = item.qty, ACTIVE, expires_at
-            row.save(update_fields=["qty", "status", "expires_at", "updated_at"])
+            row.reserved_at = reserved_at
+            row.save(update_fields=["qty", "status", "expires_at", "reserved_at", "updated_at"])
     return Reserved(order_id, ACTIVE, expires_at, wanted)
 
 

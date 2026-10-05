@@ -121,6 +121,9 @@ OTP_RESEND_SECONDS = 60
 OTP_MASTER_CODE = "000000"  # accepted only while DEBUG is on
 PHONE_ALLOWED_REGIONS = config("PHONE_ALLOWED_REGIONS", default="UZ", cast=Csv())
 
+# RabbitMQ: the outbox relay publishes seller.approved to it.
+RABBITMQ_URL = config("RABBITMQ_URL", default="amqp://rabbitmq:5672/")
+
 SMS_BACKEND = config("SMS_BACKEND", default="console")
 ESKIZ_EMAIL = config("ESKIZ_EMAIL", default="")
 ESKIZ_PASSWORD = config("ESKIZ_PASSWORD", default="")

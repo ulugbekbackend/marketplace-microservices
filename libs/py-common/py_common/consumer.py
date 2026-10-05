@@ -56,5 +56,10 @@ class EventRouter:
             if not await self._store.mark_processed(envelope.event_id):
                 logger.info("duplicate event", extra={"event_id": str(envelope.event_id)})
                 return Outcome.DUPLICATE
-            await handler(envelope)
+            try:
+                await handler(envelope)
+            except BaseException:
+                # The mark must not outlive a failed attempt, or the retry is dropped.
+                await self._store.release(envelope.event_id)
+                raise
             return Outcome.HANDLED
