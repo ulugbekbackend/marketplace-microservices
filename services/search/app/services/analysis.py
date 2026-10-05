@@ -92,10 +92,16 @@ _CHAR_FILTERS = ["uz_apostrophes", "uz_cyrillic"]
 _TOKEN_FILTERS = ["lowercase", "asciifolding"]
 
 
+#: Set explicitly on purpose: with the default, a shard that saw no search for 30 s stops
+#: refreshing in the background and a new product stays invisible for seconds.
+REFRESH_INTERVAL = "1s"
+
+
 def index_settings(*, shards: int, replicas: int) -> dict[str, Any]:
     return {
         "number_of_shards": shards,
         "number_of_replicas": replicas,
+        "refresh_interval": REFRESH_INTERVAL,
         "max_ngram_diff": AUTOCOMPLETE_MAX_GRAM,
         "analysis": {
             "char_filter": {

@@ -19,7 +19,7 @@ from uuid import UUID
 
 from elasticsearch import AsyncElasticsearch, BadRequestError, ConflictError, NotFoundError
 
-from app.services.analysis import INDEX_MAPPINGS, index_settings
+from app.services.analysis import INDEX_MAPPINGS, REFRESH_INTERVAL, index_settings
 from contracts.events import ProductUpdated
 
 logger = logging.getLogger(__name__)
@@ -245,7 +245,9 @@ class ProductIndex:
         return stats
 
     async def finish_bulk(self, index: str) -> None:
-        await self.es.indices.put_settings(index=index, settings={"refresh_interval": None})
+        await self.es.indices.put_settings(
+            index=index, settings={"refresh_interval": REFRESH_INTERVAL}
+        )
         await self.es.indices.refresh(index=index)
 
     async def swap(self, new_index: str) -> list[str]:

@@ -4,7 +4,7 @@ from datetime import timedelta
 from typing import Any
 
 import pytest
-from app.services.analysis import INDEX_MAPPINGS
+from app.services.analysis import INDEX_MAPPINGS, REFRESH_INTERVAL
 from app.services.index import (
     BulkLoadError,
     IndexMissingError,
@@ -61,6 +61,25 @@ async def test_ensure_creates_first_version_behind_alias(index: ProductIndex) ->
     assert created == f"{index.alias}_v1"
     assert (await index.targets()).live == [created]
     assert await index.ensure() == created  # idempotent
+
+
+async def refresh_interval(index: ProductIndex, name: str) -> Any:
+    settings = await index.es.indices.get_settings(index=name)
+    return settings[name]["settings"]["index"].get("refresh_interval")
+
+
+async def test_refresh_interval_is_explicit_so_idle_shards_keep_refreshing(
+    index: ProductIndex,
+) -> None:
+    created = await index.ensure()
+    assert await refresh_interval(index, created) == REFRESH_INTERVAL
+
+    bulk = index.new_index_name()
+    await index.create(bulk, bulk=True)
+    assert await refresh_interval(index, bulk) == "-1"
+    await index.finish_bulk(bulk)
+    assert await refresh_interval(index, bulk) == REFRESH_INTERVAL
+    await index.es.indices.delete(index=bulk)
 
 
 async def test_ensure_skips_a_taken_first_name(index: ProductIndex) -> None:
