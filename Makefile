@@ -21,7 +21,7 @@ keys: ## Create the RS256 key pair auth signs tokens with (kept out of git)
 up: keys ## Start the stack (infrastructure + services)
 	$(COMPOSE) up -d --build
 
-up-full: keys ## Start everything including search and monitoring profiles
+up-full: keys ## Start everything including the monitoring profile
 	$(COMPOSE) --profile full --profile search --profile monitoring up -d --build
 
 down: ## Stop the stack and remove containers

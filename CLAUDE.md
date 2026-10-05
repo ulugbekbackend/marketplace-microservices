@@ -10,7 +10,7 @@ version control.
 Toolchain is project-local (no global installs): `source .tools/env.sh` (bash) or `. .\.tools\env.ps1` first.
 ```
 make up / down / logs s=<svc> / ps
-make up-full           # + search, monitoring profiles
+make up-full           # + monitoring profile
 make migrate / seed / reindex
 make test / test-<svc> / test-e2e / load-test
 make lint / fmt / typecheck
