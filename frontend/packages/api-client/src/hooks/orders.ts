@@ -114,9 +114,13 @@ export function useOrder(orderId: Uuid | undefined) {
 
 /**
  * Polls the lightweight status endpoint (see `orderPollInterval`). When the status differs from
- * the cached detail, the detail and the list are refetched.
+ * the cached detail, the detail and the list are refetched. `poll` keeps polling a status the
+ * endpoint alone cannot tell apart, e.g. an EXPIRED order whose late payment is being settled.
  */
-export function useOrderStatus(orderId: Uuid | undefined, options: { enabled?: boolean } = {}) {
+export function useOrderStatus(
+  orderId: Uuid | undefined,
+  options: { enabled?: boolean; poll?: boolean } = {},
+) {
   const { orders } = useApi()
   const queryClient = useQueryClient()
   return useQuery<OrderStatusInfo, ApiError>({
@@ -135,7 +139,8 @@ export function useOrderStatus(orderId: Uuid | undefined, options: { enabled?: b
     },
     enabled: Boolean(orderId) && (options.enabled ?? true),
     staleTime: 0,
-    refetchInterval: (query) => orderPollInterval(query.state.data),
+    refetchInterval: (query) =>
+      options.poll ? ORDER_POLL_INTERVAL_MS : orderPollInterval(query.state.data),
   })
 }
 

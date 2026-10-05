@@ -1,6 +1,7 @@
 import type {
   OrderListParams,
   ProductListParams,
+  SearchParams,
   SellerOrderListParams,
   SellerProductListParams,
 } from '../types'
@@ -12,6 +13,10 @@ export const queryKeys = {
   products: (params: ProductListParams) => ['catalog', 'products', params] as const,
   product: (slug: string) => ['catalog', 'product', slug] as const,
   shop: (slug: string) => ['catalog', 'shop', slug] as const,
+  /** Prefix of every search query (results and suggestions). */
+  search: ['search'] as const,
+  searchResults: (params: SearchParams) => ['search', 'results', params] as const,
+  suggest: (q: string) => ['search', 'suggest', q] as const,
   /** The current cart: the guest's (cookie) or, after login and merge, the customer's. */
   cart: ['cart'] as const,
   /** Kept outside the `cart` prefix so cart invalidations leave favorites alone. */

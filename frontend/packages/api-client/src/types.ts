@@ -15,6 +15,10 @@ import type {
   components as OrderComponents,
   operations as OrderOperations,
 } from './generated/order'
+import type {
+  components as SearchComponents,
+  operations as SearchOperations,
+} from './generated/search'
 
 type AuthSchemas = AuthComponents['schemas']
 type CatalogSchemas = CatalogComponents['schemas']
@@ -198,3 +202,34 @@ export type SellerOrderListParams = NonNullable<
 /** Error codes of the seller order endpoints (not part of the OpenAPI schema). */
 export type SellerOrderErrorCode =
   'INVALID_TRANSITION' | 'ORDER_NOT_ACTIVE' | 'VALIDATION_ERROR' | 'NOT_FOUND'
+
+/* ------------------------------------------------------------------ search */
+
+type SearchSchemas = SearchComponents['schemas']
+
+export type SearchItem = SearchSchemas['SearchItem']
+export type SearchResponse = SearchSchemas['SearchResponse']
+export type SearchFacets = SearchSchemas['Facets']
+export type CategoryFacet = SearchSchemas['CategoryFacet']
+export type PriceRangeFacet = SearchSchemas['PriceRangeFacet']
+export type AttributeFacet = SearchSchemas['AttributeFacet']
+export type AttributeValueFacet = SearchSchemas['AttributeValueFacet']
+export type SearchSort = SearchSchemas['Sort']
+export type Suggestion = SearchSchemas['Suggestion']
+export type SuggestResponse = SearchSchemas['SuggestResponse']
+
+type GeneratedSearchQuery = NonNullable<
+  SearchOperations['search_api_search_get']['parameters']['query']
+>
+
+/**
+ * Search filters. `attr` maps an attribute code to the accepted values: the generated
+ * deepObject type allows one value per code, the API takes any number (values of one code are
+ * OR-ed, codes are AND-ed). Prices are tiyin, both bounds inclusive.
+ */
+export type SearchParams = Omit<GeneratedSearchQuery, 'attr'> & {
+  attr?: Record<string, readonly string[]>
+}
+
+/** Error codes of the search service (not part of the OpenAPI schema). */
+export type SearchErrorCode = 'VALIDATION_ERROR' | 'SEARCH_UNAVAILABLE'
