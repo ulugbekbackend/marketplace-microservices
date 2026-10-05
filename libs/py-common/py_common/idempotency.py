@@ -12,6 +12,10 @@ class IdempotencyStore(Protocol):
         """Return True when this event was seen for the first time."""
         ...
 
+    async def release(self, event_id: UUID) -> None:
+        """Forget an event whose handler failed, so its redelivery is processed."""
+        ...
+
 
 class MemoryIdempotencyStore:
     """For tests and single process workers."""
@@ -25,6 +29,9 @@ class MemoryIdempotencyStore:
         self._seen.add(event_id)
         return True
 
+    async def release(self, event_id: UUID) -> None:
+        self._seen.discard(event_id)
+
 
 class RedisIdempotencyStore:
     """SET NX with a TTL: the first writer wins, later duplicates are dropped."""
@@ -34,7 +41,12 @@ class RedisIdempotencyStore:
         self._prefix = prefix
         self._ttl = ttl_seconds
 
+    def _key(self, event_id: UUID) -> str:
+        return f"{self._prefix}:processed:{event_id}"
+
     async def mark_processed(self, event_id: UUID) -> bool:
-        key = f"{self._prefix}:processed:{event_id}"
-        created = await self._redis.set(key, "1", nx=True, ex=self._ttl)  # type: ignore[attr-defined]
+        created = await self._redis.set(self._key(event_id), "1", nx=True, ex=self._ttl)  # type: ignore[attr-defined]
         return bool(created)
+
+    async def release(self, event_id: UUID) -> None:
+        await self._redis.delete(self._key(event_id))  # type: ignore[attr-defined]

@@ -11,7 +11,7 @@ from contracts.enums import EventType
 from contracts.events import EventEnvelope, OrderCreated, OrderItemRef, ProductDeleted, build_event
 from py_common.consumer import EventRouter, Outcome
 from py_common.health import HealthRegistry
-from py_common.idempotency import MemoryIdempotencyStore
+from py_common.idempotency import MemoryIdempotencyStore, RedisIdempotencyStore
 from py_common.outbox import PendingEvent, publish_pending
 from py_common.retry import DeadLetter, Retry, RetryPolicy, attempt_from_headers
 
@@ -207,3 +207,47 @@ async def test_health_is_ok_when_all_checks_pass() -> None:
     report = await registry.run()
     assert report.ok is True
     assert report.as_dict()["status"] == "ok"
+
+
+async def test_failed_handler_releases_the_mark_so_a_retry_runs() -> None:
+    router = EventRouter("catalog", MemoryIdempotencyStore())
+    attempts: list[UUID] = []
+
+    @router.on(EventType.ORDER_CREATED)
+    async def handle(envelope: EventEnvelope) -> None:
+        attempts.append(envelope.event_id)
+        if len(attempts) == 1:
+            raise RuntimeError("transient")
+
+    body = make_envelope().model_dump_json()
+    with pytest.raises(RuntimeError):
+        await router.dispatch(body)
+    assert await router.dispatch(body) is Outcome.HANDLED
+    assert await router.dispatch(body) is Outcome.DUPLICATE
+    assert len(attempts) == 2
+
+
+class FakeRedis:
+    def __init__(self) -> None:
+        self.data: dict[str, str] = {}
+
+    async def set(self, key: str, value: str, *, nx: bool, ex: int) -> bool:
+        if nx and key in self.data:
+            return False
+        self.data[key] = value
+        return True
+
+    async def delete(self, key: str) -> int:
+        return 1 if self.data.pop(key, None) is not None else 0
+
+
+async def test_redis_store_marks_once_and_releases() -> None:
+    redis = FakeRedis()
+    store = RedisIdempotencyStore(redis, prefix="search", ttl_seconds=60)
+    event_id = uuid4()
+    assert await store.mark_processed(event_id)
+    assert not await store.mark_processed(event_id)
+    assert list(redis.data) == [f"search:processed:{event_id}"]
+    await store.release(event_id)
+    assert redis.data == {}
+    assert await store.mark_processed(event_id)
