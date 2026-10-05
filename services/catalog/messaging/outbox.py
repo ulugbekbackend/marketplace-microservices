@@ -8,7 +8,7 @@ from django.utils import timezone
 
 from contracts.events import EventEnvelope
 from messaging.models import Outbox, ProcessedEvent
-from py_common.outbox import PendingEvent
+from py_common.outbox import PendingEvent, Publisher, publish_pending
 
 
 class OutsideTransactionError(RuntimeError):
@@ -60,6 +60,12 @@ class DjangoOutboxStore:
 
     def mark_published(self, ids: Iterable[int | UUID]) -> None:
         Outbox.objects.filter(id__in=list(ids)).update(published_at=timezone.now())
+
+
+def relay_batch(publisher: Publisher, *, limit: int = 100) -> int:
+    """Publish one batch of pending rows; the row locks hold until they are stamped."""
+    with transaction.atomic():
+        return publish_pending(DjangoOutboxStore(), publisher, limit=limit)
 
 
 def mark_processed(envelope: EventEnvelope) -> bool:

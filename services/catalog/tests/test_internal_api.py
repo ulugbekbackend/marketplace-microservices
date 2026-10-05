@@ -1,4 +1,4 @@
-"""Internal API used by the cart and order services."""
+"""Internal API used by the cart, order and search services."""
 
 from decimal import Decimal
 from typing import Any
@@ -8,6 +8,8 @@ import pytest
 from rest_framework.test import APIClient
 
 from contracts.enums import ProductStatus
+from contracts.events import ProductUpdated
+from products.documents import build_product_document
 from tests.factories import (
     make_attribute_value,
     make_image,
@@ -19,11 +21,7 @@ from tests.factories import (
 pytestmark = pytest.mark.django_db
 
 BULK = "/internal/catalog/variants/bulk/"
-RESERVE = "/internal/catalog/reservations/"
-
-
-def reservation_url(order_id: object, action: str) -> str:
-    return f"{RESERVE}{order_id}/{action}/"
+DOCUMENTS = "/internal/catalog/search-documents/"
 
 
 def test_bulk_returns_what_the_cart_and_order_need(api: APIClient) -> None:
@@ -101,57 +99,6 @@ def test_bulk_query_count_does_not_grow_with_variants(
     assert len(response.json()["items"]) == 5
 
 
-def test_reserve_commit_and_release_over_http(api: APIClient) -> None:
-    variant = make_variant(stock=5)
-    order_id = uuid4()
-    body = {"order_id": str(order_id), "items": [{"variant_id": str(variant.id), "qty": 2}]}
-
-    reserved = api.post(RESERVE, body, format="json")
-    committed = api.post(reservation_url(order_id, "commit"))
-    released = api.post(reservation_url(order_id, "release"))
-
-    assert reserved.status_code == 200
-    assert reserved.json()["status"] == "active"
-    assert reserved.json()["items"] == [{"variant_id": str(variant.id), "qty": 2}]
-    assert reserved.json()["expires_at"]
-    assert committed.status_code == 200
-    assert committed.json()["status"] == "committed"
-    assert released.json()["items"] == []  # nothing active to give back
-    variant.refresh_from_db()
-    assert (variant.stock, variant.reserved) == (3, 0)
-
-
-def test_reserve_out_of_stock_is_409_with_the_variants(api: APIClient) -> None:
-    variant = make_variant(stock=1)
-    body = {"order_id": str(uuid4()), "items": [{"variant_id": str(variant.id), "qty": 2}]}
-
-    response = api.post(RESERVE, body, format="json")
-
-    assert response.status_code == 409
-    error = response.json()["error"]
-    assert error["code"] == "OUT_OF_STOCK"
-    assert error["details"] == {"variant_ids": [str(variant.id)]}
-
-
-def test_reserve_validates_input(api: APIClient) -> None:
-    no_items = api.post(RESERVE, {"order_id": str(uuid4()), "items": []}, format="json")
-    zero = api.post(
-        RESERVE,
-        {"order_id": str(uuid4()), "items": [{"variant_id": str(uuid4()), "qty": 0}]},
-        format="json",
-    )
-
-    assert no_items.status_code == 400
-    assert zero.status_code == 400
-
-
-def test_commit_of_an_unknown_order_is_409(api: APIClient) -> None:
-    response = api.post(reservation_url(uuid4(), "commit"))
-
-    assert response.status_code == 409
-    assert response.json()["error"]["code"] == "NOT_RESERVED"
-
-
 def test_internal_routes_are_not_in_the_public_schema(api: APIClient) -> None:
     schema = api.get("/api/catalog/schema/?format=json").json()
 
@@ -169,3 +116,104 @@ def test_stock_cannot_drop_below_reserved_units(seller_api: APIClient, seller) -
     )
 
     assert response.status_code == 409
+
+
+# --- search documents ---------------------------------------------------------------------
+
+
+def test_reserve_endpoints_are_gone(api: APIClient) -> None:
+    order_id = uuid4()
+
+    assert api.post("/internal/catalog/reservations/", {}, format="json").status_code == 404
+    assert api.post(f"/internal/catalog/reservations/{order_id}/commit/").status_code == 404
+    assert api.post(f"/internal/catalog/reservations/{order_id}/release/").status_code == 404
+
+
+def test_search_documents_are_the_product_updated_payloads(api: APIClient) -> None:
+    seller = make_seller(shop_name="Docs Shop")
+    product = make_product(seller=seller, title="Indexed")
+    variant = make_variant(product=product, price_tiyin=700, stock=3)
+    variant.attribute_values.add(make_attribute_value(value="red"))
+    make_image(product=product)
+
+    response = api.get(DOCUMENTS)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert (body["total"], body["page"], body["page_size"]) == (1, 1, 200)
+    [item] = body["items"]
+    assert ProductUpdated.model_validate(item) == build_product_document(product)
+    assert item["product_id"] == str(product.id)
+    assert item["shop_name"] == "Docs Shop"
+    assert item["in_stock"] is True
+    assert item["min_price_tiyin"] == 700
+
+
+def test_search_documents_list_only_active_products_ordered_by_id(api: APIClient) -> None:
+    active = [make_product() for _ in range(5)]
+    for product in active:
+        make_variant(product=product)
+    make_product(status=ProductStatus.DRAFT.value)
+    make_product(status=ProductStatus.ARCHIVED.value)
+    expected = sorted(str(product.id) for product in active)
+
+    first = api.get(DOCUMENTS, {"page": 1, "page_size": 2}).json()
+    second = api.get(DOCUMENTS, {"page": 2, "page_size": 2}).json()
+    last = api.get(DOCUMENTS, {"page": 3, "page_size": 2}).json()
+    beyond = api.get(DOCUMENTS, {"page": 4, "page_size": 2}).json()
+
+    assert first["total"] == 5
+    ids = [item["product_id"] for page in (first, second, last) for item in page["items"]]
+    assert ids == expected
+    assert beyond["items"] == []
+    assert (beyond["page"], beyond["page_size"], beyond["total"]) == (4, 2, 5)
+
+
+def test_product_without_active_variants_is_out_of_stock_at_zero_price(api: APIClient) -> None:
+    product = make_product()
+    make_variant(product=product, is_active=False, price_tiyin=900)
+
+    [item] = api.get(DOCUMENTS).json()["items"]
+
+    assert item["product_id"] == str(product.id)
+    assert (item["min_price_tiyin"], item["max_price_tiyin"]) == (0, 0)
+    assert item["in_stock"] is False
+    assert item["attributes"] == []
+    assert item["image_url"] is None
+
+
+@pytest.mark.parametrize(
+    "query",
+    [{"page": 0}, {"page_size": 0}, {"page_size": 501}, {"page": "x"}, {"page": 1_000_001}],
+)
+def test_search_documents_validate_paging(api: APIClient, query: dict[str, Any]) -> None:
+    response = api.get(DOCUMENTS, query)
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
+def test_search_documents_accept_the_largest_page(api: APIClient) -> None:
+    make_variant()
+
+    body = api.get(DOCUMENTS, {"page_size": 500}).json()
+
+    assert (body["page_size"], len(body["items"])) == (500, 1)
+
+
+def test_search_documents_query_count_does_not_grow_with_products(
+    api: APIClient, django_assert_max_num_queries: Any
+) -> None:
+    category = make_product().category
+    for _ in range(8):
+        variant = make_variant(product=make_product(category=category))
+        variant.attribute_values.add(make_attribute_value())
+        make_image(product=variant.product)
+
+    # count, products + sellers, variant stats, attributes, images,
+    # categories, ancestors of the one category
+    with django_assert_max_num_queries(7):
+        body = api.get(DOCUMENTS).json()
+
+    assert body["total"] == 9
+    assert len(body["items"]) == 9

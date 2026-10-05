@@ -1,10 +1,10 @@
-"""Service-to-service API (cart, order). Traefik routes only ``/api/catalog``, so
+"""Service-to-service API (cart, order, search). Traefik routes only ``/api/catalog``, so
 ``/internal/catalog`` is reachable on the internal network only.
 
-    POST /internal/catalog/variants/bulk/                   {variant_ids} -> {items}
-    POST /internal/catalog/reservations/                    {order_id, items} -> reservation
-    POST /internal/catalog/reservations/{order_id}/commit/  order paid
-    POST /internal/catalog/reservations/{order_id}/release/ order expired or cancelled
+    POST /internal/catalog/variants/bulk/     {variant_ids} -> {items}
+    GET  /internal/catalog/search-documents/  ?page=&page_size= -> paginated documents
+
+Stock reservation is event driven (``messaging.handlers``), not part of this API.
 """
 
 from typing import Any
@@ -19,12 +19,13 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from contracts.enums import ProductStatus
-from products import reservations
-from products.models import ImageStatus, ProductImage, ProductVariant
+from products.documents import build_product_documents
+from products.models import ImageStatus, Product, ProductImage, ProductVariant
 from products.storage import public_url
-from py_common.web.drf import ApiError
 
 MAX_BULK = 200
+DEFAULT_DOCUMENTS_PAGE = 200
+MAX_DOCUMENTS_PAGE = 500
 
 
 # --- variants bulk ----------------------------------------------------------------------
@@ -85,96 +86,45 @@ class VariantsBulkView(APIView):
         return Response({"items": [variant_info(variant) for variant in variants]})
 
 
-# --- reservations -----------------------------------------------------------------------
+# --- search documents -------------------------------------------------------------------
 
 
-class ReserveItemSerializer(serializers.Serializer[Any]):
-    variant_id = serializers.UUIDField()
-    qty = serializers.IntegerField(min_value=1, max_value=10_000)
-
-
-class ReserveRequestSerializer(serializers.Serializer[Any]):
-    order_id = serializers.UUIDField()
-    items = serializers.ListField(
-        child=ReserveItemSerializer(), allow_empty=False, max_length=MAX_BULK
+class SearchDocumentsQuerySerializer(serializers.Serializer[Any]):
+    page = serializers.IntegerField(min_value=1, max_value=1_000_000, default=1)
+    page_size = serializers.IntegerField(
+        min_value=1, max_value=MAX_DOCUMENTS_PAGE, default=DEFAULT_DOCUMENTS_PAGE
     )
 
 
-def reservation_body(result: reservations.Reserved) -> dict[str, Any]:
-    return {
-        "order_id": str(result.order_id),
-        "status": result.status,
-        "expires_at": result.expires_at.isoformat(),
-        "items": _items(result.items),
-    }
+class SearchDocumentsView(APIView):
+    """Every active product as its ``product.updated`` payload, for a full reindex."""
 
-
-def _items(items: list[reservations.ReservationItem]) -> list[dict[str, Any]]:
-    return [{"variant_id": str(item.variant_id), "qty": item.qty} for item in items]
-
-
-class ReserveView(APIView):
     authentication_classes = ()
     permission_classes = (AllowAny,)
 
     @extend_schema(exclude=True)
-    def post(self, request: Request) -> Response:
-        body = ReserveRequestSerializer(data=request.data)
-        body.is_valid(raise_exception=True)
-        items = [
-            reservations.ReservationItem(item["variant_id"], item["qty"])
-            for item in body.validated_data["items"]
-        ]
-        result = reservations.reserve(body.validated_data["order_id"], items)
-        if isinstance(result, reservations.ReserveFailed):
-            raise ApiError(
-                result.reason,
-                "Some items are not available in the requested quantity.",
-                status=409,
-                details={"variant_ids": [str(variant_id) for variant_id in result.variant_ids]},
-            )
-        return Response(reservation_body(result))
+    def get(self, request: Request) -> Response:
+        query = SearchDocumentsQuerySerializer(data=request.query_params)
+        query.is_valid(raise_exception=True)
+        page: int = query.validated_data["page"]
+        page_size: int = query.validated_data["page_size"]
 
-
-class CommitView(APIView):
-    authentication_classes = ()
-    permission_classes = (AllowAny,)
-
-    @extend_schema(exclude=True)
-    def post(self, request: Request, order_id: Any) -> Response:
-        try:
-            items = reservations.commit(order_id)
-        except reservations.NotReserved as exc:
-            raise ApiError(
-                "NOT_RESERVED",
-                "The order holds no stock to commit.",
-                status=409,
-                details={"order_id": str(order_id)},
-            ) from exc
-        return Response({"order_id": str(order_id), "status": "committed", "items": _items(items)})
-
-
-class ReleaseView(APIView):
-    authentication_classes = ()
-    permission_classes = (AllowAny,)
-
-    @extend_schema(exclude=True)
-    def post(self, request: Request, order_id: Any) -> Response:
-        items = reservations.release(order_id)
-        return Response({"order_id": str(order_id), "status": "released", "items": _items(items)})
+        products = Product.objects.filter(status=ProductStatus.ACTIVE.value).order_by("id")
+        offset = (page - 1) * page_size
+        batch = list(products.select_related("seller")[offset : offset + page_size])
+        return Response(
+            {
+                "items": [
+                    document.model_dump(mode="json") for document in build_product_documents(batch)
+                ],
+                "total": products.count(),
+                "page": page,
+                "page_size": page_size,
+            }
+        )
 
 
 urlpatterns = [
     path("variants/bulk/", VariantsBulkView.as_view(), name="internal-variants-bulk"),
-    path("reservations/", ReserveView.as_view(), name="internal-reserve"),
-    path(
-        "reservations/<uuid:order_id>/commit/",
-        CommitView.as_view(),
-        name="internal-reservation-commit",
-    ),
-    path(
-        "reservations/<uuid:order_id>/release/",
-        ReleaseView.as_view(),
-        name="internal-reservation-release",
-    ),
+    path("search-documents/", SearchDocumentsView.as_view(), name="internal-search-documents"),
 ]

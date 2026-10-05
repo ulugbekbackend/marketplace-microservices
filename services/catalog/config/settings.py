@@ -93,6 +93,14 @@ IMAGE_UPLOAD_URL_TTL_SECONDS = config("IMAGE_UPLOAD_URL_TTL_SECONDS", default=60
 
 # How long stock stays held for an unpaid order.
 RESERVATION_TTL_SECONDS = config("RESERVATION_TTL_SECONDS", default=15 * 60, cast=int)
+# The order service releases expired orders through order.expired. Reservations still
+# active this long after expiry are released by the beat sweep (a lost event).
+STALE_RESERVATION_GRACE_SECONDS = config(
+    "STALE_RESERVATION_GRACE_SECONDS", default=10 * 60, cast=int
+)
+
+# RabbitMQ: the outbox relay publishes to it, the consumer reads catalog.q from it.
+RABBITMQ_URL = config("RABBITMQ_URL", default="amqp://rabbitmq:5672/")
 
 # Celery: Redis db 1 as the broker, results are not stored.
 CELERY_BROKER_URL = config("CELERY_BROKER_URL", default="redis://redis:6379/1")
@@ -106,6 +114,13 @@ CELERY_TASK_SERIALIZER = "json"
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 CELERY_TIMEZONE = "UTC"
+# The worker runs with --beat (one instance only).
+CELERY_BEAT_SCHEDULE: dict[str, dict[str, object]] = {
+    "release-stale-reservations": {
+        "task": "products.tasks.release_stale_reservations",
+        "schedule": 60.0,
+    },
+}
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 USE_TZ = True
