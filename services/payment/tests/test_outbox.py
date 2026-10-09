@@ -12,12 +12,14 @@ from app.models import Base
 from app.outbox import OutboxRelay, add_event, publish_pending
 from app.services.orders import OrderClient, OrderUnavailableError
 from httpx import AsyncClient
+from prometheus_client import REGISTRY
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from contracts.enums import EventType, PaymentProvider
 from contracts.events import EventEnvelope, PaymentPaid
 from py_common.context import request_context
 from tests.conftest import FakeOrders, outbox_events
+from tests.test_click import PREPARE, prepare_form
 from tests.test_payme import create, rpc
 
 
@@ -198,3 +200,25 @@ async def test_migrations_match_the_models(engine: AsyncEngine) -> None:
 
     async with engine.connect() as connection:
         assert await connection.run_sync(diff) == []
+
+
+# --- metrics --------------------------------------------------------------------------
+
+
+def errors(provider: str, code: str) -> float:
+    return (
+        REGISTRY.get_sample_value("payment_errors_total", {"provider": provider, "code": code})
+        or 0.0
+    )
+
+
+async def test_provider_errors_are_counted(client: AsyncClient, orders: FakeOrders) -> None:
+    payme_before, click_before = errors("payme", "-31050"), errors("click", "-5")
+
+    await rpc(
+        client, "CheckPerformTransaction", {"amount": 100, "account": {"order_id": str(uuid4())}}
+    )
+    await client.post(PREPARE, data=prepare_form(uuid4()))
+
+    assert errors("payme", "-31050") == payme_before + 1
+    assert errors("click", "-5") == click_before + 1

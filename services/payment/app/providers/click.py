@@ -19,6 +19,7 @@ from uuid import UUID
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.metrics import PAYMENT_ERRORS
 from app.models import TransactionState
 from app.services import payments
 from app.services.orders import OrderClient, OrderUnavailableError
@@ -247,6 +248,8 @@ def _echo(params: Mapping[str, str], id_field: str) -> dict[str, Any]:
 
 
 def _with_error(answer: dict[str, Any], error: ClickError | None) -> dict[str, Any]:
+    if error is not None:
+        PAYMENT_ERRORS.labels(provider="click", code=str(error.code)).inc()
     answer["error"] = error.code if error is not None else SUCCESS
     answer["error_note"] = error.note if error is not None else NOTES[SUCCESS]
     return answer

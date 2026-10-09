@@ -57,6 +57,7 @@ from contracts.events import (
 )
 from contracts.ids import uuid7
 from messaging.outbox import mark_processed
+from orders.metrics import CHECKOUT_FAILED
 from orders.models import Order
 from orders.services import (
     OUT_OF_STOCK,
@@ -156,9 +157,9 @@ def on_stock_failed(envelope: EventEnvelope) -> None:
             return
         order = _lock(event.order_id)
         if order.status == OrderStatus.PENDING.value:
-            cancel_locked(
-                order, OUT_OF_STOCK if event.reason == OUT_OF_STOCK else RESERVATION_FAILED
-            )
+            reason = OUT_OF_STOCK if event.reason == OUT_OF_STOCK else RESERVATION_FAILED
+            cancel_locked(order, reason)
+            CHECKOUT_FAILED.labels(reason=reason).inc()
         elif _awaits_late_reservation(order):
             # Paid too late and the stock is gone: the customer gets the money back.
             transition(order, OrderStatus.REFUNDED, reason=LATE_PAYMENT_OUT_OF_STOCK)

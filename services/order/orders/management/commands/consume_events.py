@@ -12,6 +12,7 @@ from django.core.management.base import BaseCommand
 from django.db import close_old_connections
 
 from orders.saga import HANDLERS
+from py_common.metrics import serve
 from py_common.rabbit import BlockingConsumer, make_dispatch, stop_on_signals
 
 
@@ -30,5 +31,7 @@ class Command(BaseCommand):
     help = "Consume the events of the order service until stopped."
 
     def handle(self, *args: Any, **options: Any) -> None:
+        # The saga's checkout_failed_total lives in this process: Prometheus scrapes it here.
+        serve(settings.CONSUMER_METRICS_PORT)
         consumer = BlockingConsumer(settings.RABBITMQ_URL, settings.SERVICE_NAME, make_handler())
         consumer.run(stop_on_signals())

@@ -36,6 +36,7 @@ from contracts.money import apply_commission
 from messaging.outbox import PRODUCER, add_to_outbox
 from orders import clients
 from orders.clients import CartLine, ServiceUnavailable, VariantInfo
+from orders.metrics import CHECKOUT_FAILED, CHECKOUT_TOTAL
 from orders.models import Order, OrderItem, SubOrder
 from orders.state import lock_order, record_created, record_sub_order_created, transition
 from py_common.web.drf import ApiError
@@ -62,6 +63,15 @@ def checkout(customer_id: UUID, address: dict[str, Any]) -> Order:
     The reservation answer arrives later as an event, so the order comes back PENDING.
     Raises CART_EMPTY / ITEMS_UNAVAILABLE (nothing written) or SERVICE_UNAVAILABLE.
     """
+    CHECKOUT_TOTAL.inc()
+    try:
+        return _checkout(customer_id, address)
+    except ApiError as error:
+        CHECKOUT_FAILED.labels(reason=error.error_code).inc()
+        raise
+
+
+def _checkout(customer_id: UUID, address: dict[str, Any]) -> Order:
     wanted = merge_lines(clients.get_cart(customer_id))
     if not wanted:
         raise ApiError("CART_EMPTY", "The cart is empty.", status=409)
