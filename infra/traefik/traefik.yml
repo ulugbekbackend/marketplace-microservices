@@ -5,6 +5,9 @@ entryPoints:
     http:
       middlewares:
         - strip-identity@file
+  # Prometheus scrapes this on the internal network; it is not published on the host.
+  metrics:
+    address: ":8082"
 
 providers:
   docker:
@@ -17,6 +20,12 @@ providers:
 
 api:
   dashboard: true
+
+metrics:
+  prometheus:
+    entryPoint: metrics
+    addRoutersLabels: true
+    addServicesLabels: true
 
 # Enables `traefik healthcheck`, used by the container healthcheck.
 ping:
