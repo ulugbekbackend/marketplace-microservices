@@ -7,13 +7,16 @@ members = [
     "auth-service",
     "cart-service",
     "catalog-service",
+    "click-simulator",
     "contracts",
     "marketplace",
     "notification-service",
     "order-service",
+    "payme-simulator",
     "payment-service",
     "py-common",
     "search-service",
+    "simulator-kit",
 ]
 
 [[package]]
@@ -586,6 +589,17 @@ sdist = { url = "https://files.pythonhosted.org/packages/8e/f5/19bce5e62ee971387
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e0/ae/63d94d251d2e1a7bf3794ea47cb1c99fe6de055b732ea79d7bcdabef8ff5/click_repl-0.4.0-py3-none-any.whl", hash = "sha256:fee730650f34204f1bd41b8fab46f6b51dda019b4a35ed89ab8553ba31f7d6d3", size = 14976, upload-time = "2026-09-17T07:22:00.429Z" },
 ]
+
+[[package]]
+name = "click-simulator"
+version = "0.1.0"
+source = { editable = "tools/click-simulator" }
+dependencies = [
+    { name = "simulator-kit" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "simulator-kit", editable = "tools/simulator-kit" }]
 
 [[package]]
 name = "colorama"
@@ -1403,6 +1417,17 @@ wheels = [
 ]
 
 [[package]]
+name = "payme-simulator"
+version = "0.1.0"
+source = { editable = "tools/payme-simulator" }
+dependencies = [
+    { name = "simulator-kit" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "simulator-kit", editable = "tools/simulator-kit" }]
+
+[[package]]
 name = "payment-service"
 version = "0.1.0"
 source = { virtual = "services/payment" }
@@ -1995,6 +2020,21 @@ dev = [
     { name = "pytest", specifier = "==9.1.1" },
     { name = "pytest-asyncio", specifier = "==1.4.0" },
     { name = "pytest-cov", specifier = "==7.1.0" },
+]
+
+[[package]]
+name = "simulator-kit"
+version = "0.1.0"
+source = { editable = "tools/simulator-kit" }
+dependencies = [
+    { name = "httpx" },
+    { name = "python-decouple" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "httpx", specifier = "==0.28.1" },
+    { name = "python-decouple", specifier = "==3.8" },
 ]
 
 [[package]]

@@ -22,7 +22,7 @@ dev = [
 package = false
 
 [tool.uv.workspace]
-members = ["libs/*", "services/*"]
+members = ["libs/*", "services/*", "tools/*"]
 
 [tool.uv.sources]
 contracts = { workspace = true }

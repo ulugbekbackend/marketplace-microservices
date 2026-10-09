@@ -7,7 +7,8 @@ PY_SERVICES := auth catalog order cart search payment notification
 
 .DEFAULT_GOAL := help
 .PHONY: help up up-full down logs ps build migrate seed reindex \
-        test test-libs test-integration lint fmt typecheck gen-rabbit gen-api keys clean
+        test test-libs test-integration payme-sim click-sim lint fmt typecheck gen-rabbit gen-api \
+        keys clean
 
 help: ## Show available targets
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | sort | awk -F':.*?## ' '{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -62,6 +63,12 @@ test: ## Run every Python test suite (shared libs + each service)
 test-integration: ## Gateway and system tests against the running stack
 	uv run pytest tests/integration -p no:cacheprovider
 
+payme-sim: ## Play Payme against the running stack: make payme-sim [s="happy bad-auth"]
+	uv run python -m payme_simulator $(s)
+
+click-sim: ## Play Click against the running stack: make click-sim [s="happy cancelled"]
+	uv run python -m click_simulator $(s)
+
 test-libs: ## Run the shared library tests only
 	uv run pytest libs
 
@@ -77,7 +84,7 @@ fmt: ## Format the code
 	uv run ruff check . --fix
 
 typecheck: ## Type check with mypy
-	uv run mypy libs
+	uv run mypy libs tools
 	@for s in $(PY_SERVICES); do echo "== $$s"; (cd services/$$s && uv run --project . mypy .) || exit 1; done
 
 API_SCHEMAS := frontend/packages/api-client/openapi
