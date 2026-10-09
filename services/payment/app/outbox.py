@@ -23,6 +23,9 @@ logger = logging.getLogger(__name__)
 #: The ``producer`` field of every envelope this service publishes.
 PRODUCER = "payment"
 
+#: Longest pause between relay attempts while the database or broker keeps failing.
+MAX_BACKOFF_SECONDS = 30.0
+
 
 class AsyncPublisher(Protocol):
     async def publish(self, envelope: EventEnvelope) -> None: ...
@@ -115,12 +118,24 @@ class OutboxRelay:
         self._task = asyncio.create_task(self._loop(), name="payment-outbox-relay")
 
     async def _loop(self) -> None:
+        failures = 0
         while True:
             try:
                 count = await publish_pending(self._sessions, self._publisher, limit=self._batch)
             except Exception:
-                logger.warning("outbox relay iteration failed", exc_info=True)
-                count = 0
+                failures += 1
+                # The first failure in full, then a short line every tenth while it lasts.
+                if failures == 1 or failures % 10 == 0:
+                    logger.warning(
+                        "outbox relay iteration failed",
+                        exc_info=failures == 1,
+                        extra={"failures": failures},
+                    )
+                await asyncio.sleep(min(self._interval * 2**failures, MAX_BACKOFF_SECONDS))
+                continue
+            if failures:
+                logger.info("outbox relay recovered", extra={"failures": failures})
+                failures = 0
             if count < self._batch:
                 await asyncio.sleep(self._interval)
 

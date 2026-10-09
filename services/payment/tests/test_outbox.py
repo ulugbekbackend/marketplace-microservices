@@ -101,6 +101,35 @@ async def test_relay_publishes_in_the_background(
     assert len(publisher.published) == 2
 
 
+async def test_relay_keeps_going_after_database_errors(
+    sessions: async_sessionmaker[AsyncSession],
+) -> None:
+    attempts = 0
+
+    def flaky() -> Any:
+        nonlocal attempts
+        attempts += 1
+        if attempts <= 2:
+            raise ConnectionError("database is restarting")
+        return sessions.begin()
+
+    flaky_sessions = type("Flaky", (), {"begin": staticmethod(flaky)})()
+    publisher = RecordingPublisher()
+    relay = OutboxRelay(flaky_sessions, publisher, interval=0.01)
+    await stage(sessions, 1)
+    relay.start()
+    try:
+        for _ in range(300):
+            if publisher.published:
+                break
+            await asyncio.sleep(0.01)
+    finally:
+        await relay.stop()
+
+    assert attempts >= 3
+    assert len(publisher.published) == 1
+
+
 # --- order client ---------------------------------------------------------------------
 
 

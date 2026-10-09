@@ -4,7 +4,6 @@ import logging
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from datetime import datetime
-from urllib.parse import urlsplit
 
 import httpx
 from decouple import config
@@ -12,17 +11,19 @@ from fastapi import FastAPI
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from app.api import payments, providers
+from app.api import payments, providers, seller
+from app.consumers.events import SERVICE, PaymentEventHandler
 from app.core.config import Settings, load_settings
 from app.db import make_engine, make_sessionmaker
 from app.outbox import OutboxRelay
+from app.payouts import PayoutScheduler
 from app.providers.click import ClickShop
 from app.providers.payme import PaymeMerchant
 from app.services.orders import OrderClient
 from app.services.payments import utcnow
-from py_common.health import CheckFn, HealthRegistry, tcp_check
+from py_common.health import CheckFn, HealthRegistry
 from py_common.logging import configure_logging
-from py_common.rabbit import AioPikaPublisher
+from py_common.rabbit import AioPikaConsumer, AioPikaPublisher, ConsumerRunner, broker_probe
 from py_common.web.fastapi import setup
 
 SERVICE_NAME = "payment"
@@ -43,17 +44,12 @@ def database_check(app: FastAPI) -> CheckFn:
     return check
 
 
-def broker_check(url: str) -> CheckFn:
-    parts = urlsplit(url)
-    return tcp_check(parts.hostname or "localhost", parts.port or 5672)
-
-
 def build_registry(app: FastAPI, settings: Settings) -> HealthRegistry:
     """Ready means the database answers: callbacks cannot be served without it."""
     registry = HealthRegistry()
     registry.add("postgres", database_check(app))
     if settings.rabbitmq_url:
-        registry.add("rabbitmq", broker_check(settings.rabbitmq_url))
+        registry.add("rabbitmq", broker_probe(settings.rabbitmq_url))
     return registry
 
 
@@ -95,9 +91,27 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         publisher = AioPikaPublisher(settings.rabbitmq_url)
         relay = OutboxRelay(app.state.sessions, publisher, interval=settings.relay_interval_seconds)
         relay.start()
+    runner: ConsumerRunner | None = None
+    if settings.rabbitmq_url and settings.consumer_enabled:
+        runner = ConsumerRunner(
+            AioPikaConsumer(
+                settings.rabbitmq_url, SERVICE, PaymentEventHandler(app.state.sessions)
+            ),
+            probe=broker_probe(settings.rabbitmq_url),
+            name="payment-consumer",
+        )
+        runner.start()
+    scheduler: PayoutScheduler | None = None
+    if settings.payout_scheduler_enabled:
+        scheduler = PayoutScheduler(app.state.sessions)
+        scheduler.start()
     try:
         yield
     finally:
+        if scheduler is not None:
+            await scheduler.stop()
+        if runner is not None:
+            await runner.stop()
         if relay is not None:
             await relay.stop()
         if publisher is not None:
@@ -119,6 +133,7 @@ def create_app(*, settings: Settings | None = None, with_lifespan: bool = True) 
     setup(app, registry=build_registry(app, settings), api_prefix=API_PREFIX)
     app.include_router(payments.router)
     app.include_router(providers.router)
+    app.include_router(seller.router)
     return app
 
 

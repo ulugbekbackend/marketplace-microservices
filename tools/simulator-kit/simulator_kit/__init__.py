@@ -73,20 +73,22 @@ class Shopper:
             response = self.http.post(f"/api/auth/otp/{path}", json=body)
         return response
 
-    def in_stock_variant(self) -> str:
-        found = self.http.get("/api/search", params={"in_stock": "true", "page_size": 50})
+    def in_stock_variant(self, shop_name: str | None = None) -> str:
+        found = self.http.get("/api/search", params={"in_stock": "true", "page_size": 100})
         for product in found.json().get("items", []):
+            if shop_name is not None and product.get("shop_name") != shop_name:
+                continue
             detail = self.http.get(f"/api/catalog/products/{product['slug']}/").json()
             for variant in detail.get("variants", []):
                 if variant.get("available", 0) > 0:
                     return str(variant["id"])
         raise SimulatorError("no product in stock: run `make seed`")
 
-    def reserved_order(self) -> Order:
+    def reserved_order(self, shop_name: str | None = None) -> Order:
         """Cart -> checkout -> wait until the catalog reserved the stock."""
         self.http.delete("/api/cart/")
         added = self.http.post(
-            "/api/cart/items/", json={"variant_id": self.in_stock_variant(), "qty": 1}
+            "/api/cart/items/", json={"variant_id": self.in_stock_variant(shop_name), "qty": 1}
         )
         if added.status_code != 200:
             raise SimulatorError(f"add to cart failed: {added.text}")
