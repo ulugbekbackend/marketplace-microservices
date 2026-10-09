@@ -341,9 +341,6 @@ export const uz = {
     latePaymentHint:
       "To'lov muddat tugagandan keyin keldi. Mahsulotlar hali bo'lsa, buyurtma davom etadi, bo'lmasa pul to'liq qaytariladi.",
     toCart: "Savatchaga o'tish",
-    pay: "To'lash (test)",
-    payHint: "Test rejimi: haqiqiy to'lov o'tmaydi.",
-    paid: "To'lov qabul qilindi",
     mockDisabled: "Test to'lovi bu muhitda o'chirilgan.",
     cancel: 'Buyurtmani bekor qilish',
     cancelTitle: 'Buyurtma bekor qilinsinmi?',
@@ -396,6 +393,42 @@ export const uz = {
       notFound: 'Buyurtma topilmadi.',
       network: "Server bilan aloqa yo'q. Internetni tekshiring.",
       unknown: "Nimadir xato ketdi. Qaytadan urinib ko'ring.",
+    },
+  },
+  payment: {
+    method: "To'lov usuli",
+    provider: {
+      payme: 'Payme',
+      click: 'Click',
+      mock: "Test to'lov",
+    },
+    providerHint: {
+      payme: 'Karta yoki Payme ilovasi',
+      click: 'Karta yoki Click ilovasi',
+      mock: "Haqiqiy pul o'tmaydi",
+    },
+    payWith: "{{provider}} orqali to'lash",
+    payTest: "Test to'lovini o'tkazish",
+    resultTitle: "Buyurtma {{number}} to'lovi",
+    via: '{{provider}} orqali',
+    waitingTitle: "To'lov tasdiqlanishini kutyapmiz",
+    waitingHint:
+      "To'lov oynasida to'lovni yakunlagan bo'lsangiz, natija bir necha soniyada shu yerda ko'rinadi.",
+    slowTitle: "To'lov hali tasdiqlanmadi",
+    slowHint:
+      "To'lovni yakunlamagan bo'lsangiz, buyurtmaga qaytib boshqa usulni tanlang. Pul yechilgan bo'lsa, buyurtma o'zi yangilanadi.",
+    paidTitle: "To'lov qabul qilindi",
+    paidHint: "Do'konlar buyurtmangizni yig'ishni boshlaydi.",
+    viewOrder: "Buyurtmani ko'rish",
+    backToOrder: 'Buyurtmaga qaytish',
+    errors: {
+      ORDER_NOT_PAYABLE: "Bu buyurtmani endi to'lab bo'lmaydi. Holatini yangiladik.",
+      PAYMENT_IN_PROGRESS:
+        "Bu buyurtma uchun boshqa to'lov boshlangan. Uni yakunlang yoki bir ozdan keyin qayta urinib ko'ring.",
+      ORDER_SERVICE_UNAVAILABLE:
+        "To'lovni hozir boshlab bo'lmadi. Bir ozdan keyin qayta urinib ko'ring.",
+      network: "Server bilan aloqa yo'q. Internetni tekshiring.",
+      unknown: "To'lovni boshlab bo'lmadi. Qaytadan urinib ko'ring.",
     },
   },
   errors: {

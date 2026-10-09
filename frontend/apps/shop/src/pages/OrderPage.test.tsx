@@ -2,8 +2,14 @@ import { queryKeys, type Order, type OrderStatus } from '@bozorcha/api-client'
 import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { leaveTo } from '../lib/redirect'
 import { apiError, json, renderWithApi, type Route } from '../test/renderApp'
 import { OrderPage } from './OrderPage'
+
+vi.mock('../lib/redirect', async (original) => ({
+  ...(await original<object>()),
+  leaveTo: vi.fn(),
+}))
 
 const plain = (text: string | null) => (text ?? '').replaceAll(String.fromCharCode(0xa0), ' ')
 
@@ -92,6 +98,7 @@ const STATUS = `/api/orders/${ID}/status/`
 
 const routes = [
   { path: '/orders/:orderId', element: <OrderPage /> },
+  { path: '/orders/:orderId/payment', element: <p>To'lov natijasi</p> },
   { path: '/login', element: <p>Kirish sahifasi</p> },
 ]
 
@@ -102,7 +109,10 @@ function setup(api: Record<string, Route>, signedIn = true) {
 const statusOf = (order: Order) => () =>
   json(200, { status: order.status, reserved_until: order.reserved_until })
 
-afterEach(() => vi.useRealTimers())
+afterEach(() => {
+  vi.useRealTimers()
+  vi.mocked(leaveTo).mockReset()
+})
 
 describe('OrderPage', () => {
   it('shows a reserved order: countdown, items per shop, totals, address and history', async () => {
@@ -114,7 +124,10 @@ describe('OrderPage', () => {
     expect(await screen.findByRole('heading', { name: 'Buyurtma #A1B2C3D4' })).toBeInTheDocument()
     const timer = screen.getByRole('timer', { name: "To'lov uchun qolgan vaqt" })
     expect(timer.textContent).toMatch(/^1[45]:\d\d$/)
-    expect(screen.getByRole('button', { name: "To'lash (test)" })).toBeInTheDocument()
+    const methods = screen.getByRole('group', { name: "To'lov usuli" })
+    expect(within(methods).getByRole('radio', { name: /Payme/ })).toBeChecked()
+    expect(within(methods).getByRole('radio', { name: /Click/ })).not.toBeChecked()
+    expect(screen.getByRole('button', { name: "Payme orqali to'lash" })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Buyurtmani bekor qilish' })).toBeInTheDocument()
 
     const rishton = screen.getByRole('region', { name: 'Rishton sopol' })
@@ -193,53 +206,57 @@ describe('OrderPage', () => {
     expect(callsTo('GET', STATUS)).toHaveLength(polls)
   })
 
-  it('pays with the mock button and refetches the cart', async () => {
+  it('starts a Click payment and sends the browser to the redirect URL', async () => {
     const u = userEvent.setup()
     const reserved = withStatus('RESERVED')
-    const paid = withStatus('PAID', {
-      sellers: baseOrder.sellers.map((g, i) => ({
-        ...g,
-        sub_order_id: `so${i}`,
-        status: i === 0 ? 'NEW' : 'SHIPPED',
-      })),
-    })
-    const { queryClient } = setup({
+    const { callsTo } = setup({
       [`GET ${DETAIL}`]: () => json(200, reserved),
       [`GET ${STATUS}`]: statusOf(reserved),
-      [`POST /api/orders/${ID}/pay/mock/`]: () => json(200, paid),
+      [`POST /api/payments/${ID}/init/`]: () =>
+        json(200, { redirect_url: 'https://checkout.example/click' }),
+    })
+    await u.click(await screen.findByRole('radio', { name: /Click/ }))
+    await u.click(screen.getByRole('button', { name: "Click orqali to'lash" }))
+
+    await waitFor(() => expect(leaveTo).toHaveBeenCalledWith('https://checkout.example/click'))
+    const [, init] = callsTo('POST', `/api/payments/${ID}/init/`)[0]!
+    expect(JSON.parse(String(init?.body))).toEqual({ provider: 'click' })
+  })
+
+  it('pays with the test method and opens the result page', async () => {
+    const u = userEvent.setup()
+    const reserved = withStatus('RESERVED')
+    const { queryClient, callsTo } = setup({
+      [`GET ${DETAIL}`]: () => json(200, reserved),
+      [`GET ${STATUS}`]: statusOf(reserved),
+      [`POST /api/payments/mock/${ID}/pay`]: () =>
+        json(200, { transaction_id: 't1', order_id: ID, amount_tiyin: reserved.total_tiyin }),
     })
     // the header's cart, cached before paying
     queryClient.setQueryData(queryKeys.cart, { items_count: 3 })
-    await u.click(await screen.findByRole('button', { name: "To'lash (test)" }))
-    expect(
-      await screen.findByText(
-        "Do'konlar buyurtmangizni yig'ishni boshlaydi. Holatini shu sahifada kuzating.",
-      ),
-    ).toBeInTheDocument()
-    expect(screen.getAllByText("To'landi").length).toBeGreaterThan(0)
-    const rishton = screen.getByRole('region', { name: 'Rishton sopol' })
-    expect(within(rishton).getByText('Yangi')).toBeInTheDocument()
-    expect(
-      within(screen.getByRole('region', { name: "Marg'ilon atlas" })).getByText("Yo'lda"),
-    ).toBeInTheDocument()
-    expect(
-      screen.queryByRole('button', { name: 'Buyurtmani bekor qilish' }),
-    ).not.toBeInTheDocument()
-    // the server cleared the cart: the cached one is stale now
+    await u.click(await screen.findByRole('radio', { name: /Test to'lov/ }))
+    await u.click(screen.getByRole('button', { name: "Test to'lovini o'tkazish" }))
+
+    expect(await screen.findByText("To'lov natijasi")).toBeInTheDocument()
+    expect(callsTo('POST', `/api/payments/mock/${ID}/pay`)).toHaveLength(1)
+    expect(callsTo('POST', `/api/orders/${ID}/pay/mock/`)).toHaveLength(0)
     expect(queryClient.getQueryState(queryKeys.cart)?.isInvalidated).toBe(true)
   })
 
-  it('hides the mock button when the server has mock payments off', async () => {
+  it('drops the test method when the server has mock payments off', async () => {
     const u = userEvent.setup()
     const reserved = withStatus('RESERVED')
     setup({
       [`GET ${DETAIL}`]: () => json(200, reserved),
       [`GET ${STATUS}`]: statusOf(reserved),
-      [`POST /api/orders/${ID}/pay/mock/`]: () => apiError(404, 'NOT_FOUND'),
+      [`POST /api/payments/mock/${ID}/pay`]: () => apiError(404, 'NOT_FOUND'),
     })
-    await u.click(await screen.findByRole('button', { name: "To'lash (test)" }))
+    await u.click(await screen.findByRole('radio', { name: /Test to'lov/ }))
+    await u.click(screen.getByRole('button', { name: "Test to'lovini o'tkazish" }))
+
     expect(await screen.findByText("Test to'lovi bu muhitda o'chirilgan.")).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: "To'lash (test)" })).not.toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: /Test to'lov/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: /Payme/ })).toBeChecked()
     expect(screen.getByRole('timer')).toBeInTheDocument()
   })
 
@@ -357,22 +374,22 @@ describe('OrderPage', () => {
     expect(router.state.location.search).toBe(`?next=${encodeURIComponent(`/orders/${ID}`)}`)
   })
 
-  it('asks to wait when the mock payment finds the order not reserved yet', async () => {
+  it('rereads the order when the payment service says it can no longer be paid', async () => {
     const u = userEvent.setup()
     const reserved = withStatus('RESERVED')
-    setup({
+    const { callsTo } = setup({
       [`GET ${DETAIL}`]: () => json(200, reserved),
       [`GET ${STATUS}`]: statusOf(reserved),
-      [`POST /api/orders/${ID}/pay/mock/`]: () => apiError(409, 'NOT_RESERVED'),
+      [`POST /api/payments/${ID}/init/`]: () =>
+        apiError(409, 'ORDER_NOT_PAYABLE', { status: 'EXPIRED' }),
     })
-    await u.click(await screen.findByRole('button', { name: "To'lash (test)" }))
+    await u.click(await screen.findByRole('button', { name: "Payme orqali to'lash" }))
+
     expect(
-      await screen.findByText(
-        "Mahsulotlar hali band qilinmoqda. Bir necha soniyadan keyin qayta urinib ko'ring.",
-      ),
+      await screen.findByText("Bu buyurtmani endi to'lab bo'lmaydi. Holatini yangiladik."),
     ).toBeInTheDocument()
-    // still offered: the next try succeeds once the reservation lands
-    expect(screen.getByRole('button', { name: "To'lash (test)" })).toBeInTheDocument()
+    await waitFor(() => expect(callsTo('GET', STATUS).length).toBeGreaterThan(1))
+    expect(leaveTo).not.toHaveBeenCalled()
   })
 
   it('shows a late payment as waiting and keeps polling until it settles', async () => {
