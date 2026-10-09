@@ -20,7 +20,7 @@ volumes:
   postgres-data:
   redis-data:
   rabbitmq-data:
-  minio-data:
+  s3-data:
   elasticsearch-data:
 
 services:
@@ -117,45 +117,51 @@ services:
       RABBITMQ_USER: ${RABBITMQ_USER}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
 
-  minio:
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
-    command: ["server", "/data", "--console-address", ":9001"]
+  # S3 compatible object storage (RustFS, Apache 2.0).
+  s3:
+    image: rustfs/rustfs:1.0.1
     environment:
-      MINIO_ROOT_USER: ${S3_ACCESS_KEY}
-      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY}
+      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY}
+      RUSTFS_SECRET_KEY: ${S3_SECRET_KEY}
+      RUSTFS_ADDRESS: ":9000"
+      RUSTFS_VOLUMES: /data
       # Sellers upload images straight from the browser with presigned PUT URLs.
-      MINIO_API_CORS_ALLOW_ORIGIN: http://seller.localhost,http://shop.localhost
+      RUSTFS_CORS_ALLOWED_ORIGINS: http://seller.localhost,http://shop.localhost
     volumes:
-      - minio-data:/data
+      - s3-data:/data
     networks: [edge, internal]
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:9000/health"]
       interval: 10s
       timeout: 5s
       retries: 20
     labels:
       - traefik.enable=true
-      - traefik.http.routers.minio.rule=Host(`minio.localhost`)
-      - traefik.http.services.minio.loadbalancer.server.port=9000
+      - traefik.http.routers.s3.rule=Host(`s3.localhost`)
+      - traefik.http.services.s3.loadbalancer.server.port=9000
 
-  minio-init:
-    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
+  # Creates the bucket and lets anyone download objects (no listing, no writes).
+  s3-init:
+    image: amazon/aws-cli:2.37.11
     depends_on:
-      minio: {condition: service_healthy}
+      s3: {condition: service_healthy}
     networks: [internal]
     restart: "no"
     environment:
-      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
-      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY}
+      AWS_DEFAULT_REGION: ${S3_REGION}
       S3_BUCKET: ${S3_BUCKET}
     entrypoint:
       - sh
       - -c
       - >
-        mc alias set local http://minio:9000 "$${S3_ACCESS_KEY}" "$${S3_SECRET_KEY}" &&
-        mc mb --ignore-existing local/$${S3_BUCKET} &&
-        mc anonymous set download local/$${S3_BUCKET}
+        e="--endpoint-url http://s3:9000" &&
+        { aws $$e s3api head-bucket --bucket "$${S3_BUCKET}" 2>/dev/null ||
+          aws $$e s3api create-bucket --bucket "$${S3_BUCKET}"; } &&
+        aws $$e s3api put-bucket-policy --bucket "$${S3_BUCKET}" --policy
+        "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"AWS\":[\"*\"]},\"Action\":[\"s3:GetObject\"],\"Resource\":[\"arn:aws:s3:::$${S3_BUCKET}/*\"]}]}"
 
   mailpit:
     image: axllent/mailpit:v1.31.2

@@ -82,8 +82,8 @@ SPECTACULAR_SETTINGS: dict[str, object] = {
 # Object storage. S3_ENDPOINT is what the services use inside the network,
 # S3_PUBLIC_ENDPOINT is what browsers reach: presigned upload URLs and public
 # image URLs are built for it.
-S3_ENDPOINT = config("S3_ENDPOINT", default="http://minio:9000")
-S3_PUBLIC_ENDPOINT = config("S3_PUBLIC_ENDPOINT", default="http://minio.localhost")
+S3_ENDPOINT = config("S3_ENDPOINT", default="http://s3:9000")
+S3_PUBLIC_ENDPOINT = config("S3_PUBLIC_ENDPOINT", default="http://s3.localhost")
 S3_ACCESS_KEY = config("S3_ACCESS_KEY", default="")
 S3_SECRET_KEY = config("S3_SECRET_KEY", default="")
 S3_BUCKET = config("S3_BUCKET", default="marketplace")

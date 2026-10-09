@@ -1,4 +1,4 @@
-"""S3 (MinIO) access: presigned uploads for browsers, reads and writes for the worker."""
+"""S3 access: presigned uploads for browsers, reads and writes for the worker."""
 
 from dataclasses import dataclass
 from functools import cache
