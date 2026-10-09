@@ -12,6 +12,9 @@ from accounts.phone import normalize_phone, validate_e164_phone
 from contracts.enums import UserRole
 from contracts.ids import uuid7
 
+#: A Telegram chat id: digits, negative for groups.
+validate_telegram_chat_id = RegexValidator(r"^-?\d{1,20}$", "Telegram chat id must be a number.")
+
 
 class Role(models.TextChoices):
     CUSTOMER = UserRole.CUSTOMER.value, "Customer"
@@ -45,6 +48,11 @@ class User(AbstractBaseUser):
     id = models.UUIDField(primary_key=True, default=uuid7, editable=False)
     phone = models.CharField(max_length=16, unique=True, validators=[validate_e164_phone])
     full_name = models.CharField(max_length=150, blank=True)
+    # Optional notification channels; SMS to ``phone`` is always sent.
+    email = models.EmailField(blank=True, default="")
+    telegram_chat_id = models.CharField(
+        max_length=32, blank=True, default="", validators=[validate_telegram_chat_id]
+    )
     role = models.CharField(max_length=16, choices=Role.choices, default=Role.CUSTOMER)
     is_active = models.BooleanField(default=True)
     date_joined = models.DateTimeField(default=timezone.now)

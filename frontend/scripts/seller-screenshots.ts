@@ -229,6 +229,8 @@ const seller = {
   id: 'u-seller',
   phone: '+998901234567',
   full_name: 'Dilnoza Karimova',
+  email: '',
+  telegram_chat_id: '',
   role: 'seller',
   date_joined: at(30),
 }

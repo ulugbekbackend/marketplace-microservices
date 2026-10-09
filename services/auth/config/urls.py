@@ -20,4 +20,5 @@ urlpatterns = [
     ),
     path("api/auth/django-admin/", admin.site.urls),
     path("api/auth/", include("accounts.urls")),
+    path("internal/auth/", include("accounts.internal")),
 ]

@@ -10,16 +10,22 @@ from accounts.models import ApplicationStatus, SellerApplication, User
 class UserSerializer(serializers.ModelSerializer[User]):
     class Meta:
         model = User
-        fields = ("id", "phone", "full_name", "role", "date_joined")
+        fields = ("id", "phone", "full_name", "email", "telegram_chat_id", "role", "date_joined")
         read_only_fields = fields
 
 
 class UserUpdateSerializer(serializers.ModelSerializer[User]):
+    """Every field is optional (PATCH); an empty email or chat id switches that channel off."""
+
     full_name = serializers.CharField(max_length=150, allow_blank=False, trim_whitespace=True)
+    email = serializers.EmailField(allow_blank=True, required=False)
 
     class Meta:
         model = User
-        fields = ("full_name",)
+        fields = ("full_name", "email", "telegram_chat_id")
+
+    def validate_email(self, value: str) -> str:
+        return value.strip().lower()
 
 
 class OtpSendSerializer(serializers.Serializer[Any]):
