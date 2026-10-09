@@ -1,11 +1,24 @@
-import type { OrderStatus } from '@bozorcha/api-client'
+import type { OrderStatus, PaymentProvider } from '@bozorcha/api-client'
 
 /**
- * The dev-only "To'lash (test)" button: on in the Vite dev server, and in builds made with
+ * The dev-only test payment method: on in the Vite dev server, and in builds made with
  * `VITE_MOCK_PAYMENT=true`. The server still decides; it answers 404 when mock payments are off.
  */
 export const MOCK_PAYMENT_ENABLED =
   import.meta.env.DEV || import.meta.env.VITE_MOCK_PAYMENT === 'true'
+
+/** A provider, or the development test payment. */
+export type PaymentMethod = PaymentProvider | 'mock'
+
+export const PAYMENT_METHODS: readonly PaymentMethod[] = ['payme', 'click', 'mock']
+
+/** Where the customer lands after paying (the payment service builds the same URL). */
+export const paymentResultPath = (orderId: string, method: PaymentMethod) =>
+  `/orders/${orderId}/payment?provider=${method}`
+
+/** Statuses that mean the money arrived. */
+export const isPaid = (status: OrderStatus) =>
+  status === 'PAID' || status === 'FULFILLING' || status === 'COMPLETED'
 
 /** Short, human-friendly order number: the first block of the UUID. */
 export const orderNumber = (id: string) => `#${id.slice(0, 8).toUpperCase()}`

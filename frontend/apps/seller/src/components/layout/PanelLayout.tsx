@@ -4,7 +4,7 @@ import {
   useSellerApplication,
   useSellerOrderStats,
 } from '@bozorcha/api-client'
-import { Badge, cn, Drawer, formatE164, Skeleton, Wordmark } from '@bozorcha/ui'
+import { cn, Drawer, formatE164, Skeleton, Wordmark } from '@bozorcha/ui'
 import { ClipboardList, LayoutDashboard, Menu, Package, Store, Wallet } from 'lucide-react'
 import { useState, type ComponentType } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -17,14 +17,13 @@ type NavItem = {
   labelKey: 'nav.dashboard' | 'nav.products' | 'nav.orders' | 'nav.payouts'
   icon: ComponentType<{ size?: number; strokeWidth?: number; 'aria-hidden'?: boolean }>
   end?: boolean
-  soon?: boolean
 }
 
 const NAV: NavItem[] = [
   { to: '/', labelKey: 'nav.dashboard', icon: LayoutDashboard, end: true },
   { to: '/products', labelKey: 'nav.products', icon: Package },
   { to: '/orders', labelKey: 'nav.orders', icon: ClipboardList },
-  { to: '/payouts', labelKey: 'nav.payouts', icon: Wallet, soon: true },
+  { to: '/payouts', labelKey: 'nav.payouts', icon: Wallet },
 ]
 
 /** Count of sub-orders waiting for the seller; re-read every minute. */
@@ -51,37 +50,26 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
   const { t } = useTranslation()
   return (
     <ul className="flex flex-col gap-1">
-      {NAV.map(({ to, labelKey, icon: Icon, end, soon }) => (
+      {NAV.map(({ to, labelKey, icon: Icon, end }) => (
         <li key={to}>
-          {soon ? (
-            <span
-              aria-disabled="true"
-              className={cn(itemBase, 'cursor-not-allowed text-text-muted')}
-            >
-              <Icon aria-hidden size={20} strokeWidth={1.75} />
-              <span className="flex-1">{t(labelKey)}</span>
-              <Badge tone="muted">{t('nav.soon')}</Badge>
-            </span>
-          ) : (
-            <NavLink
-              to={to}
-              end={end}
-              onClick={onNavigate}
-              className={({ isActive }) =>
-                cn(
-                  itemBase,
-                  'focus-ring',
-                  isActive
-                    ? 'bg-primary-soft font-semibold text-primary'
-                    : 'text-text hover:bg-surface-2',
-                )
-              }
-            >
-              <Icon aria-hidden size={20} strokeWidth={1.75} />
-              {t(labelKey)}
-              {to === '/orders' && <NewOrdersBadge />}
-            </NavLink>
-          )}
+          <NavLink
+            to={to}
+            end={end}
+            onClick={onNavigate}
+            className={({ isActive }) =>
+              cn(
+                itemBase,
+                'focus-ring',
+                isActive
+                  ? 'bg-primary-soft font-semibold text-primary'
+                  : 'text-text hover:bg-surface-2',
+              )
+            }
+          >
+            <Icon aria-hidden size={20} strokeWidth={1.75} />
+            {t(labelKey)}
+            {to === '/orders' && <NewOrdersBadge />}
+          </NavLink>
         </li>
       ))}
     </ul>

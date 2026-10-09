@@ -1,7 +1,5 @@
 import {
-  isApiError,
   useCancelOrder,
-  useMockPay,
   useOrder,
   useOrderStatus,
   type Order,
@@ -35,21 +33,22 @@ import {
   TimerOff,
   Truck,
 } from 'lucide-react'
-import { useEffect, useId, useState, type ReactNode } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useParams } from 'react-router'
 import { OrderStatusLabel, SubOrderStatusLabel } from '../components/OrderStatusLabel'
+import { PaymentMethods } from '../components/PaymentMethods'
 import { QueryError } from '../components/QueryError'
 import { RequireAuth } from '../components/RequireAuth'
+import { StatusPanel } from '../components/StatusPanel'
 import { formatDateTime } from '../lib/dates'
 import { isNotFound } from '../lib/errors'
-import { orderErrorKey, orderErrorMessage } from '../lib/orderErrors'
+import { orderErrorMessage } from '../lib/orderErrors'
 import {
   awaitsLateReservation,
   isCancellable,
   knownReason,
   lastReasonFor,
-  MOCK_PAYMENT_ENABLED,
   orderNumber,
 } from '../lib/orders'
 import { NotFoundPage } from './NotFoundPage'
@@ -114,7 +113,7 @@ function OrderView({ order }: { order: Order }) {
         <OrderStatusLabel status={order.status} />
       </div>
 
-      <StatusPanel order={order} />
+      <OrderStatusBanner order={order} />
 
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_22rem] lg:gap-8">
         <section aria-label={t('orders.items')} className="flex min-w-0 flex-col gap-4">
@@ -134,7 +133,7 @@ function OrderView({ order }: { order: Order }) {
 
 /* ------------------------------------------------------------------ status */
 
-function StatusPanel({ order }: { order: Order }) {
+function OrderStatusBanner({ order }: { order: Order }) {
   const { t } = useTranslation()
   // Polls while PENDING, while RESERVED past the deadline and while a late payment waits for
   // stock, until the server settles it.
@@ -144,7 +143,7 @@ function StatusPanel({ order }: { order: Order }) {
 
   if (lateReservation) {
     return (
-      <Panel
+      <StatusPanel
         tone="info"
         icon={<Spinner />}
         title={t('orders.latePaymentTitle')}
@@ -157,7 +156,7 @@ function StatusPanel({ order }: { order: Order }) {
   switch (order.status) {
     case 'PENDING':
       return (
-        <Panel
+        <StatusPanel
           tone="info"
           icon={<Spinner />}
           title={t('orders.pendingTitle')}
@@ -171,7 +170,7 @@ function StatusPanel({ order }: { order: Order }) {
     case 'PAID':
     case 'FULFILLING':
       return (
-        <Panel
+        <StatusPanel
           tone="success"
           icon={<CircleCheck size={22} strokeWidth={1.75} />}
           title={t('orders.paidTitle')}
@@ -181,7 +180,7 @@ function StatusPanel({ order }: { order: Order }) {
       )
     case 'COMPLETED':
       return (
-        <Panel
+        <StatusPanel
           tone="primary"
           icon={<PackageCheck size={22} strokeWidth={1.75} />}
           title={t('orders.completedTitle')}
@@ -190,7 +189,7 @@ function StatusPanel({ order }: { order: Order }) {
       )
     case 'EXPIRED':
       return (
-        <Panel
+        <StatusPanel
           tone="muted"
           icon={<TimerOff size={22} strokeWidth={1.75} />}
           title={t('orders.expiredTitle')}
@@ -201,7 +200,7 @@ function StatusPanel({ order }: { order: Order }) {
       )
     case 'CANCELLED':
       return (
-        <Panel
+        <StatusPanel
           tone="danger"
           icon={<CircleX size={22} strokeWidth={1.75} />}
           title={t('orders.cancelledTitle')}
@@ -213,7 +212,7 @@ function StatusPanel({ order }: { order: Order }) {
     case 'REFUNDED': {
       const refundReason = lastReasonFor(order.history, 'REFUNDED')
       return (
-        <Panel
+        <StatusPanel
           tone="info"
           icon={<RotateCcw size={22} strokeWidth={1.75} />}
           title={t('orders.refundedTitle')}
@@ -227,52 +226,6 @@ function StatusPanel({ order }: { order: Order }) {
       )
     }
   }
-}
-
-const panelTones = {
-  info: 'border-info/30 bg-info-soft text-info-ink',
-  success: 'border-success/30 bg-success-soft text-success-ink',
-  primary: 'border-primary/30 bg-primary-soft text-primary',
-  danger: 'border-danger/30 bg-danger-soft text-danger-ink',
-  muted: 'border-border bg-surface-2 text-text-muted',
-} as const
-
-function Panel({
-  tone,
-  icon,
-  title,
-  hint,
-  actions,
-  live,
-}: {
-  tone: keyof typeof panelTones
-  icon: ReactNode
-  title: string
-  hint?: string
-  actions?: ReactNode
-  live?: boolean
-}) {
-  return (
-    <div
-      role={live ? 'status' : undefined}
-      data-testid="status-panel"
-      className={cn(
-        'flex flex-col gap-4 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5',
-        panelTones[tone],
-      )}
-    >
-      <div className="flex items-start gap-3">
-        <span aria-hidden="true" className="mt-0.5 shrink-0">
-          {icon}
-        </span>
-        <div className="flex flex-col gap-1">
-          <p className="font-heading text-lg font-bold">{title}</p>
-          {hint && <p className="text-sm text-text">{hint}</p>}
-        </div>
-      </div>
-      {actions && <div className="flex flex-wrap gap-2 sm:shrink-0">{actions}</div>}
-    </div>
-  )
 }
 
 function CartLink() {
@@ -316,7 +269,7 @@ function ReservedPanel({ order, onExpire }: { order: Order; onExpire: () => void
       className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-4 shadow-soft sm:p-5 dark:shadow-none"
       data-testid="status-panel"
     >
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="flex flex-col gap-1">
           <p id={labelId} className="flex items-center gap-1.5 text-sm font-medium text-text-muted">
             <Clock aria-hidden="true" size={16} strokeWidth={1.75} />
@@ -334,10 +287,7 @@ function ReservedPanel({ order, onExpire }: { order: Order; onExpire: () => void
             {formatMmSs(secondsLeft)}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <PayButton order={order} />
-          <CancelButton order={order} />
-        </div>
+        <CancelButton order={order} />
       </div>
       <div aria-hidden="true" className="h-1.5 overflow-hidden rounded-full bg-surface-2">
         <div
@@ -349,43 +299,10 @@ function ReservedPanel({ order, onExpire }: { order: Order; onExpire: () => void
         />
       </div>
       <p className="text-sm text-text-muted">{t('orders.reservedHint')}</p>
+      <div className="border-t border-border pt-4">
+        <PaymentMethods order={order} onRejected={onExpire} />
+      </div>
     </div>
-  )
-}
-
-function PayButton({ order }: { order: Order }) {
-  const { t } = useTranslation()
-  const { toast } = useToast()
-  const pay = useMockPay()
-  const [unavailable, setUnavailable] = useState(false)
-  if (!MOCK_PAYMENT_ENABLED || unavailable) return null
-  return (
-    <Button
-      variant="accent"
-      loading={pay.isPending}
-      title={t('orders.payHint')}
-      onClick={() =>
-        pay.mutate(
-          { orderId: order.id },
-          {
-            onSuccess: () => toast({ title: t('orders.paid'), tone: 'success' }),
-            onError: (error) => {
-              if (isApiError(error) && error.status === 404) {
-                setUnavailable(true)
-                toast({ title: t('orders.mockDisabled'), tone: 'info' })
-              } else if (orderErrorKey(error) === 'NOT_RESERVED') {
-                // Still PENDING: the reservation lands in a moment and polling picks it up.
-                toast({ title: orderErrorMessage(t, error), tone: 'info' })
-              } else {
-                toast({ title: orderErrorMessage(t, error), tone: 'danger' })
-              }
-            },
-          },
-        )
-      }
-    >
-      {t('orders.pay')}
-    </Button>
   )
 }
 

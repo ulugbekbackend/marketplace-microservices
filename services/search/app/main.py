@@ -13,13 +13,7 @@ from fastapi import FastAPI
 from redis.asyncio import Redis
 
 from app.api import internal, search
-from app.consumers.products import (
-    SERVICE,
-    ConsumerRunner,
-    ProductEventHandler,
-    broker_probe,
-    build_router,
-)
+from app.consumers.products import SERVICE, ProductEventHandler, build_router
 from app.core.config import Settings, load_settings
 from app.services.catalog import CatalogClient
 from app.services.index import ProductIndex
@@ -28,7 +22,7 @@ from app.services.search import SearchService
 from py_common.health import CheckFn, HealthRegistry
 from py_common.idempotency import RedisIdempotencyStore
 from py_common.logging import configure_logging
-from py_common.rabbit import AioPikaConsumer
+from py_common.rabbit import AioPikaConsumer, ConsumerRunner, broker_probe
 from py_common.web.fastapi import setup
 
 SERVICE_NAME = "search"
@@ -119,6 +113,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         runner = ConsumerRunner(
             AioPikaConsumer(settings.rabbitmq_url, SERVICE, app.state.event_handler),
             probe=broker_probe(settings.rabbitmq_url),
+            name="search-consumer",
         )
         runner.start()
     app.state.consumer = runner

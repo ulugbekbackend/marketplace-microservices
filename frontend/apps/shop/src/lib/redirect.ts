@@ -5,3 +5,8 @@ export function safeNext(value: string | null): string {
   }
   return value
 }
+
+/** Leaves the app for a full page URL (a payment provider's checkout). */
+export function leaveTo(url: string): void {
+  window.location.assign(url)
+}

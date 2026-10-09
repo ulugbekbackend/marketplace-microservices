@@ -4,7 +4,7 @@ Multi-vendor marketplace, microservices in a monorepo (portfolio project).
 The full specification, the task list and the progress journal are kept locally, outside
 version control.
 
-**Current phase:** P4 done (tag `phase-4`): RabbitMQ outbox relays and consumers with retry/DLQ, event-driven checkout saga (late payment, scheduled expiry), search service (Elasticsearch, Uzbek transliteration, facets, suggest, reindex) and the shop on the search API. Next is P5 — Payment.
+**Current phase:** P5 done: payment service (Payme Merchant API, Click SHOP API, mock provider, outbox), Payme and Click simulators with system tests, refunds and weekly seller payouts, payment methods and result page in the shop, payouts page in the seller cabinet; object storage moved to RustFS. Next is P6 — Notification, quality, CI, monitoring.
 
 ## Commands
 Toolchain is project-local (no global installs): `source .tools/env.sh` (bash) or `. .\.tools\env.ps1` first.

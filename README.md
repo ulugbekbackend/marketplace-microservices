@@ -62,7 +62,7 @@ make ps                 # every service should report healthy
 | `http://api.localhost/api/<service>/health/live` | service liveness through the gateway |
 | `http://traefik.localhost` | routing dashboard |
 | `http://rabbit.localhost` | broker management |
-| `http://minio.localhost` | object storage |
+| `http://s3.localhost` | object storage (S3 API) |
 | `http://mail.localhost` | captured outgoing email |
 
 ## Development
@@ -74,6 +74,26 @@ make typecheck   # mypy, strict
 make gen-rabbit  # regenerate the broker topology from the contracts
 make down        # stop everything
 ```
+
+## Payments
+
+Payme and Click call the payment service, not the other way round, so two simulators play
+the provider side against the running stack and check every answer. They need
+`PAYME_KEY`, `CLICK_SERVICE_ID` and `CLICK_SECRET_KEY` in `.env` and the dev OTP code
+(`DEBUG=True`).
+
+```bash
+make payme-sim                     # Check -> Create -> Perform, duplicates, wrong amount,
+                                   # expired order, cancel after perform, bad auth
+make click-sim s="happy cancelled" # prepare -> complete, signature, duplicates
+```
+
+A repeated callback answers with the stored result and never writes the money twice.
+
+Refunds (a seller cancelling a sub-order, a late payment whose stock ran out) are recorded
+against the paid transaction and published as `payment.refunded`. Without live merchant
+credentials the provider side of a refund is not called; the transaction is cancelled locally.
+Sellers see their weekly payouts (Monday to Sunday, UTC) in the seller cabinet.
 
 Conventions: money is stored as integer tiyin (1 so'm = 100 tiyin) and never as a float,
 identifiers are UUIDv7, timestamps are UTC, and the API error shape is

@@ -4,7 +4,6 @@ import asyncio
 from collections.abc import AsyncIterator
 
 import pytest
-from app.consumers.products import broker_probe
 from app.core.config import load_settings
 from app.main import app, create_app, ensure_index_forever, make_elasticsearch
 from app.services.index import ProductIndex
@@ -12,6 +11,7 @@ from elasticsearch import AsyncElasticsearch
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
+from py_common.rabbit import broker_probe
 from tests.conftest import closed_port_url, make_settings
 
 

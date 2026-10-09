@@ -1,17 +1,7 @@
 """The service answers liveness at the root and behind the gateway prefix."""
 
-from collections.abc import AsyncIterator
-
 import pytest
-from app.main import app
-from httpx import ASGITransport, AsyncClient
-
-
-@pytest.fixture
-async def client() -> AsyncIterator[AsyncClient]:
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        yield client
+from httpx import AsyncClient
 
 
 @pytest.mark.parametrize("url", ["/health/live", "/api/payments/health/live"])
@@ -29,11 +19,11 @@ async def test_metrics_are_exposed(client: AsyncClient) -> None:
     assert "python_info" in response.text
 
 
-async def test_readiness_reports_dependencies(client: AsyncClient) -> None:
+async def test_readiness_checks_the_database(client: AsyncClient) -> None:
     response = await client.get("/health/ready")
 
-    assert response.status_code in (200, 503)
-    assert set(response.json()["checks"]) == {"postgres", "rabbitmq"}
+    assert response.status_code == 200
+    assert set(response.json()["checks"]) == {"postgres"}
 
 
 async def test_correlation_id_is_returned(client: AsyncClient) -> None:

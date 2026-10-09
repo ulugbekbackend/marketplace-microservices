@@ -89,6 +89,11 @@ const SHOTS: Shot[] = [
   { name: 'cart-empty', path: '/cart?empty' },
   { name: 'checkout', path: '/checkout?clean', signedIn: true },
   { name: 'order-reserved', path: `/orders/${ORDER_ID}`, signedIn: true },
+  {
+    name: 'payment-waiting',
+    path: `/orders/${ORDER_ID}/payment?provider=payme`,
+    signedIn: true,
+  },
   { name: 'orders', path: '/orders', signedIn: true },
   {
     name: 'login-otp',

@@ -61,6 +61,10 @@ export const routes: RouteObject[] = [
               Component: (await import('./pages/OrderDetailPage')).OrderDetailPage,
             }),
           },
+          {
+            path: 'payouts',
+            lazy: async () => ({ Component: (await import('./pages/PayoutsPage')).PayoutsPage }),
+          },
           { path: '*', element: <NotFoundPage /> },
         ],
       },

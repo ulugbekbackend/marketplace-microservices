@@ -6,17 +6,14 @@ from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
-from app.consumers.products import (
-    ConsumerRunner,
-    ProductEventHandler,
-    build_router,
-)
+from app.consumers.products import ProductEventHandler, build_router
 from app.services.index import IndexMissingError, ProductIndex
 from pydantic import ValidationError
 
 from contracts.events import ProductDeleted, ProductUpdated, build_event
 from py_common.consumer import Outcome
 from py_common.idempotency import RedisIdempotencyStore
+from py_common.rabbit import ConsumerRunner
 from tests.conftest import BASE_TIME, FakeRedis, make_product
 
 

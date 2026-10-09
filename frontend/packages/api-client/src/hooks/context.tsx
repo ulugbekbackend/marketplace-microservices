@@ -5,6 +5,7 @@ import {
   cartEndpoints,
   catalogEndpoints,
   orderEndpoints,
+  paymentEndpoints,
   searchEndpoints,
   sellerCatalogEndpoints,
   sellerOrderEndpoints,
@@ -16,6 +17,7 @@ type ApiContextValue = {
   catalog: ReturnType<typeof catalogEndpoints>
   cart: ReturnType<typeof cartEndpoints>
   orders: ReturnType<typeof orderEndpoints>
+  payments: ReturnType<typeof paymentEndpoints>
   search: ReturnType<typeof searchEndpoints>
   seller: ReturnType<typeof sellerCatalogEndpoints>
   sellerOrders: ReturnType<typeof sellerOrderEndpoints>
@@ -31,6 +33,7 @@ export function ApiProvider({ client, children }: { client: ApiClient; children:
       catalog: catalogEndpoints(client),
       cart: cartEndpoints(client),
       orders: orderEndpoints(client),
+      payments: paymentEndpoints(client),
       search: searchEndpoints(client),
       seller: sellerCatalogEndpoints(client),
       sellerOrders: sellerOrderEndpoints(client),
