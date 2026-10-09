@@ -57,7 +57,7 @@ test test-libs $(addprefix test-,$(PY_SERVICES)): export REDIS_PORT = $(HOST_RED
 test test-libs $(addprefix test-,$(PY_SERVICES)): export RABBITMQ_HOST = localhost
 
 test: ## Run every Python test suite (shared libs + each service)
-	uv run pytest libs
+	uv run pytest libs tools/tests
 	@for s in $(PY_SERVICES); do echo "== $$s"; (cd services/$$s && uv run --project . pytest) || exit 1; done
 
 test-integration: ## Gateway and system tests against the running stack
@@ -72,8 +72,8 @@ payme-sim: ## Play Payme against the running stack: make payme-sim [s="happy bad
 click-sim: ## Play Click against the running stack: make click-sim [s="happy cancelled"]
 	uv run python -m click_simulator $(s)
 
-test-libs: ## Run the shared library tests only
-	uv run pytest libs
+test-libs: ## Run the shared library and repository check tests
+	uv run pytest libs tools/tests
 
 $(addprefix test-,$(PY_SERVICES)): test-%: ## Run one service suite: make test-catalog
 	cd services/$* && uv run --project . pytest

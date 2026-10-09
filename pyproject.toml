@@ -22,7 +22,7 @@ dev = [
 package = false
 
 [tool.uv.workspace]
-members = ["libs/*", "services/*", "tools/*"]
+members = ["libs/*", "services/*", "tools/simulator-kit", "tools/*-simulator"]
 
 [tool.uv.sources]
 contracts = { workspace = true }
