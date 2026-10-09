@@ -66,7 +66,9 @@ test('guest: search, cart, login, checkout, test payment, order in the list', as
   await expect(page.getByRole('heading', { name: 'Rasmiylashtirish' })).toBeVisible()
   await expect(page.getByText(title)).toBeVisible()
   await fillCheckout(page, 'E2E Xaridor')
-  await page.getByRole('button', { name: 'Buyurtma berish' }).click()
+  const submit = page.getByRole('button', { name: 'Buyurtma berish' })
+  await expect(submit).toBeEnabled()
+  await submit.click()
   await expect(page.getByRole('timer')).toBeVisible()
   await shot(page, '1-order-reserved')
   const orderId = page.url().split('/orders/')[1]!.split(/[/?]/)[0]!
@@ -103,9 +105,10 @@ test('two customers race for the last unit: one PAID, the other CANCELLED', asyn
   }
 
   // Both submit at the same moment; the catalog reserves the single unit for one of them.
-  await Promise.all(
-    pages.map((page) => page.getByRole('button', { name: 'Buyurtma berish' }).click()),
-  )
+  // The button stays disabled until the cart has loaded: wait for it, or a click is lost.
+  const submits = pages.map((page) => page.getByRole('button', { name: 'Buyurtma berish' }))
+  for (const submit of submits) await expect(submit).toBeEnabled()
+  await Promise.all(submits.map((submit) => submit.click()))
   const outcomes = await Promise.all(
     pages.map(async (page) => {
       const reserved = page.getByRole('timer')
