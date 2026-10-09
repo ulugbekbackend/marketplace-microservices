@@ -90,6 +90,11 @@ make click-sim s="happy cancelled" # prepare -> complete, signature, duplicates
 
 A repeated callback answers with the stored result and never writes the money twice.
 
+Refunds (a seller cancelling a sub-order, a late payment whose stock ran out) are recorded
+against the paid transaction and published as `payment.refunded`. Without live merchant
+credentials the provider side of a refund is not called; the transaction is cancelled locally.
+Sellers see their weekly payouts (Monday to Sunday, UTC) in the seller cabinet.
+
 Conventions: money is stored as integer tiyin (1 so'm = 100 tiyin) and never as a float,
 identifiers are UUIDv7, timestamps are UTC, and the API error shape is
 `{"error": {"code", "message", "details"}}` in every service.
