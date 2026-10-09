@@ -47,7 +47,7 @@ def _pending_error() -> ApiError:
 
 
 def latest_application(user_id: UUID) -> SellerApplication | None:
-    return SellerApplication.objects.filter(user_id=user_id).order_by("-created_at").first()
+    return SellerApplication.objects.filter(user_id=user_id).order_by("-created_at", "-id").first()
 
 
 def _lock_pending(application_id: UUID) -> SellerApplication:
