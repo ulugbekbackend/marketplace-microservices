@@ -18,4 +18,5 @@ urlpatterns = [
         name="docs",
     ),
     path("api/orders/", include("orders.urls")),
+    path("internal/orders/", include("orders.internal")),
 ]

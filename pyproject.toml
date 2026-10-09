@@ -31,7 +31,7 @@ py-common = { workspace = true }
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-extend-exclude = ["**/migrations/*"]
+extend-exclude = ["**/migrations/*", "**/alembic/versions/*"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "C4", "DTZ", "RUF"]
@@ -53,7 +53,7 @@ module = ["tests.*"]
 disallow_untyped_defs = false
 
 [[tool.mypy.overrides]]
-module = ["decouple", "drf_spectacular.*", "pika", "pika.*"]
+module = ["decouple", "drf_spectacular.*", "pika", "pika.*", "asyncpg", "asyncpg.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
