@@ -5,6 +5,7 @@ Django services use the blocking (pika) side, FastAPI services the asyncio (aio-
 Both share the failure policy below, which is where the behaviour lives.
 """
 
+import asyncio
 import logging
 import signal
 import threading
@@ -12,6 +13,7 @@ import time
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urlsplit
 
 import aio_pika
 import pika
@@ -29,6 +31,7 @@ from contracts.enums import EventType
 from contracts.events import EventEnvelope
 from contracts.topology import EXCHANGE, dlq_name, queue_name, retry_queue_name
 from py_common.context import request_context
+from py_common.health import CheckFn, tcp_check
 from py_common.retry import RETRY_COUNT_HEADER, DeadLetter, RetryPolicy, attempt_from_headers
 
 logger = logging.getLogger(__name__)
@@ -426,3 +429,60 @@ class AioPikaConsumer:
         connection, self._connection, self._channel = self._connection, None, None
         if connection is not None:
             await connection.close()
+
+
+class ConsumerRunner:
+    """Starts the RabbitMQ consumer in the background and keeps trying until the broker
+    answers, so the HTTP API serves even while RabbitMQ is down.
+
+    ``probe`` (a plain TCP check) runs before each attempt: aio-pika's robust connect
+    swallows a cancellation that arrives mid-connect and starts reconnecting, so the
+    runner only calls it once the broker port accepts connections, and shutdown never
+    waits on it for longer than ``stop_timeout``.
+    """
+
+    def __init__(
+        self,
+        consumer: AioPikaConsumer,
+        *,
+        probe: CheckFn | None = None,
+        retry_seconds: float = 5.0,
+        stop_timeout: float = 5.0,
+        name: str = "event-consumer",
+    ) -> None:
+        self._consumer = consumer
+        self._name = name
+        self._probe = probe
+        self._retry_seconds = retry_seconds
+        self._stop_timeout = stop_timeout
+        self._task: asyncio.Task[None] | None = None
+        self.started = asyncio.Event()
+
+    def start(self) -> None:
+        self._task = asyncio.create_task(self._start_loop(), name=self._name)
+
+    async def _start_loop(self) -> None:
+        while True:
+            try:
+                if self._probe is not None:
+                    await self._probe()
+                await self._consumer.start()
+            except Exception:
+                logger.warning("consumer start failed, retrying", exc_info=True)
+                await self._consumer.stop()
+                await asyncio.sleep(self._retry_seconds)
+            else:
+                self.started.set()
+                return
+
+    async def stop(self) -> None:
+        if self._task is not None:
+            self._task.cancel()
+            await asyncio.wait({self._task}, timeout=self._stop_timeout)
+        await self._consumer.stop()
+
+
+def broker_probe(url: str) -> CheckFn:
+    """A TCP check of the broker host and port named in an AMQP URL."""
+    parts = urlsplit(url)
+    return tcp_check(parts.hostname or "localhost", parts.port or 5672)
