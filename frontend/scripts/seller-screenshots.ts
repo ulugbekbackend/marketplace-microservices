@@ -393,6 +393,29 @@ const emptyStats = {
   by_status: { NEW: 0, ACCEPTED: 0, SHIPPED: 0, DELIVERED: 0, CANCELLED_BY_SELLER: 0 },
 }
 
+/** Weekly payouts, newest first: the current week is still pending. */
+const payouts = [
+  ['2026-09-21', 7, 6_150_000_00, 'pending'],
+  ['2026-09-14', 4, 2_980_000_00, 'paid'],
+  ['2026-09-07', 9, 8_420_500_00, 'paid'],
+  ['2026-08-31', 2, 765_000_00, 'paid'],
+].map(([start, lines, gross, status], i) => {
+  const end = new Date(`${start as string}T00:00:00Z`)
+  end.setUTCDate(end.getUTCDate() + 7)
+  const commission = Math.round((gross as number) * 0.1)
+  return {
+    id: `payout-${i}`,
+    period_start: start as string,
+    period_end: end.toISOString().slice(0, 10),
+    gross_tiyin: gross as number,
+    commission_tiyin: commission,
+    net_tiyin: (gross as number) - commission,
+    status: status as string,
+    lines_count: lines as number,
+    created_at: end.toISOString(),
+  }
+})
+
 const SHOTS: Shot[] = [
   { name: 'login', path: '/login' },
   { name: 'onboarding-form', path: '/onboarding', role: 'customer', application: 'none' },
@@ -445,6 +468,8 @@ const SHOTS: Shot[] = [
     },
   },
   { name: 'product-edit', path: `/products/${details[0]!.id}`, role: 'seller' },
+  { name: 'payouts', path: '/payouts', role: 'seller' },
+  { name: 'payouts-empty', path: '/payouts', role: 'seller', noSales: true },
 ]
 
 function parseArgs(argv: string[]) {
@@ -510,6 +535,10 @@ async function mockApi(page: Page, shot: Shot) {
     }
     if (path === '/api/orders/seller/stats/') {
       return json(route, 200, shot.noSales ? emptyStats : stats)
+    }
+    if (path === '/api/payments/seller/payouts/') {
+      const items = shot.noSales ? [] : payouts
+      return json(route, 200, { items, total: items.length, page: 1, page_size: 20 })
     }
     if (path === '/api/orders/seller/') {
       const status = url.searchParams.get('status')?.split(',') ?? []
