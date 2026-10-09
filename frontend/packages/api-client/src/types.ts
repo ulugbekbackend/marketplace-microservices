@@ -16,6 +16,10 @@ import type {
   operations as OrderOperations,
 } from './generated/order'
 import type {
+  components as PaymentComponents,
+  operations as PaymentOperations,
+} from './generated/payment'
+import type {
   components as SearchComponents,
   operations as SearchOperations,
 } from './generated/search'
@@ -233,3 +237,25 @@ export type SearchParams = Omit<GeneratedSearchQuery, 'attr'> & {
 
 /** Error codes of the search service (not part of the OpenAPI schema). */
 export type SearchErrorCode = 'VALIDATION_ERROR' | 'SEARCH_UNAVAILABLE'
+
+/* ------------------------------------------------------------------ payment */
+
+type PaymentSchemas = PaymentComponents['schemas']
+
+/** Providers the customer can choose when paying. */
+export type PaymentProvider = PaymentSchemas['InitRequest']['provider']
+export type PaymentInitRequest = PaymentSchemas['InitRequest']
+export type PaymentInitResponse = PaymentSchemas['InitResponse']
+export type MockPaymentResult = PaymentSchemas['MockPayResponse']
+export type SellerPayout = PaymentSchemas['PayoutOut']
+export type SellerPayoutListParams = NonNullable<
+  PaymentOperations['payments_seller_payouts']['parameters']['query']
+>
+
+/** Error codes returned by the payment service (not part of the OpenAPI schema). */
+export type PaymentErrorCode =
+  | 'NOT_FOUND'
+  | 'ORDER_NOT_PAYABLE'
+  | 'PAYMENT_IN_PROGRESS'
+  | 'ORDER_SERVICE_UNAVAILABLE'
+  | 'PERMISSION_DENIED'

@@ -13,8 +13,11 @@ import type {
   OrderListParams,
   OrderStatusInfo,
   OrderSummary,
+  MockPaymentResult,
   OtpVerifyResponse,
   Paginated,
+  PaymentInitResponse,
+  PaymentProvider,
   PresignRequest,
   PresignResponse,
   ProductCreateRequest,
@@ -27,6 +30,8 @@ import type {
   SellerApplication,
   SellerApplyRequest,
   SellerOrderListParams,
+  SellerPayout,
+  SellerPayoutListParams,
   SellerStats,
   SellerSubOrder,
   SellerSubOrderDetail,
@@ -250,5 +255,22 @@ export function searchEndpoints(client: ApiClient) {
     /** Up to 8 titles; empty for queries shorter than 2 characters. */
     suggest: (q: string, signal?: AbortSignal) =>
       client.get<SuggestResponse>('/api/search/suggest', { query: { q }, signal }),
+  }
+}
+
+/** The payment service: start a payment, the development mock and seller payouts. */
+export function paymentEndpoints(client: ApiClient) {
+  const base = '/api/payments'
+  return {
+    /** Where to send the customer: the provider's checkout or the shop's result page. */
+    init: (orderId: Uuid, provider: PaymentProvider) =>
+      client.post<PaymentInitResponse>(`${base}/${seg(orderId)}/init/`, { provider }),
+
+    /** Dev only: pays at once through the real payment.paid path; 404 when disabled. */
+    payMock: (orderId: Uuid) => client.post<MockPaymentResult>(`${base}/mock/${seg(orderId)}/pay`),
+
+    /** The calling seller's weekly payouts, newest first. */
+    sellerPayouts: (params: SellerPayoutListParams = {}, signal?: AbortSignal) =>
+      client.get<Paginated<SellerPayout>>(`${base}/seller/payouts/`, { query: params, signal }),
   }
 }

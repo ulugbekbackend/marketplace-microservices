@@ -1,0 +1,359 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Payment service",
+    "version": "0.2.0"
+  },
+  "paths": {
+    "/api/payments/{order_id}/init/": {
+      "post": {
+        "tags": ["payments"],
+        "summary": "Init Payment",
+        "description": "Where to send the customer to pay a RESERVED order with the chosen provider.",
+        "operationId": "payments_init",
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InitRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InitResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND: no such order of this customer"
+          },
+          "409": {
+            "description": "ORDER_NOT_PAYABLE / PAYMENT_IN_PROGRESS"
+          },
+          "503": {
+            "description": "ORDER_SERVICE_UNAVAILABLE"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/payments/mock/{order_id}/pay": {
+      "post": {
+        "tags": ["payments"],
+        "summary": "Mock Pay",
+        "description": "Development only (PAYMENT_MOCK_ENABLED): pay at once through the real\n``payment.paid`` path. 404 when disabled.",
+        "operationId": "payments_mock_pay",
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MockPayResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND: no such order of this customer"
+          },
+          "409": {
+            "description": "ORDER_NOT_PAYABLE / PAYMENT_IN_PROGRESS"
+          },
+          "503": {
+            "description": "ORDER_SERVICE_UNAVAILABLE"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/payments/seller/payouts/": {
+      "get": {
+        "tags": ["seller"],
+        "summary": "Seller Payouts",
+        "description": "The seller's weekly payouts, newest week first.",
+        "operationId": "payments_seller_payouts",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Page Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayoutPage"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "PERMISSION_DENIED: not a seller"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "InitRequest": {
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": ["payme", "click"],
+            "title": "Provider"
+          }
+        },
+        "type": "object",
+        "required": ["provider"],
+        "title": "InitRequest"
+      },
+      "InitResponse": {
+        "properties": {
+          "redirect_url": {
+            "type": "string",
+            "title": "Redirect Url"
+          }
+        },
+        "type": "object",
+        "required": ["redirect_url"],
+        "title": "InitResponse"
+      },
+      "MockPayResponse": {
+        "properties": {
+          "transaction_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Transaction Id"
+          },
+          "order_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Order Id"
+          },
+          "amount_tiyin": {
+            "type": "integer",
+            "title": "Amount Tiyin"
+          }
+        },
+        "type": "object",
+        "required": ["transaction_id", "order_id", "amount_tiyin"],
+        "title": "MockPayResponse"
+      },
+      "PayoutOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "period_start": {
+            "type": "string",
+            "format": "date",
+            "title": "Period Start"
+          },
+          "period_end": {
+            "type": "string",
+            "format": "date",
+            "title": "Period End"
+          },
+          "gross_tiyin": {
+            "type": "integer",
+            "title": "Gross Tiyin"
+          },
+          "commission_tiyin": {
+            "type": "integer",
+            "title": "Commission Tiyin"
+          },
+          "net_tiyin": {
+            "type": "integer",
+            "title": "Net Tiyin"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "lines_count": {
+            "type": "integer",
+            "title": "Lines Count"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "period_start",
+          "period_end",
+          "gross_tiyin",
+          "commission_tiyin",
+          "net_tiyin",
+          "status",
+          "lines_count",
+          "created_at"
+        ],
+        "title": "PayoutOut"
+      },
+      "PayoutPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PayoutOut"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          }
+        },
+        "type": "object",
+        "required": ["items", "total", "page", "page_size"],
+        "title": "PayoutPage"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": ["loc", "msg", "type"],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

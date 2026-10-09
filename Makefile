@@ -91,7 +91,7 @@ API_SCHEMAS := frontend/packages/api-client/openapi
 
 gen-api: ## Export OpenAPI schemas and regenerate the frontend API types
 	@for s in auth catalog order; do 		(cd services/$$s && uv run --project . python manage.py spectacular 			--format openapi-json --file ../../$(API_SCHEMAS)/$$s.json) || exit 1; 	done
-	@for s in cart search; do 		(cd services/$$s && uv run --project . python -c "import json; from app.main import app; print(json.dumps(app.openapi(), indent=2))" > ../../$(API_SCHEMAS)/$$s.json) || exit 1; 	done
+	@for s in cart search payment; do 		(cd services/$$s && uv run --project . python -c "import json; from app.main import app; print(json.dumps(app.openapi(), indent=2))" > ../../$(API_SCHEMAS)/$$s.json) || exit 1; 	done
 	cd frontend && pnpm gen-api
 
 gen-rabbit: ## Regenerate the broker topology from the contracts

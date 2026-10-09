@@ -3,6 +3,7 @@ import type {
   ProductListParams,
   SearchParams,
   SellerOrderListParams,
+  SellerPayoutListParams,
   SellerProductListParams,
 } from '../types'
 
@@ -38,5 +39,8 @@ export const queryKeys = {
   sellerOrders: ['seller', 'orders'] as const,
   sellerOrderList: (params: SellerOrderListParams) => ['seller', 'orders', 'list', params] as const,
   sellerOrder: (id: string) => ['seller', 'orders', 'detail', id] as const,
+  /** Prefix of every seller payout query. */
+  sellerPayouts: ['seller', 'payouts'] as const,
+  sellerPayoutList: (params: SellerPayoutListParams) => ['seller', 'payouts', params] as const,
   sellerOrderStats: ['seller', 'orders', 'stats'] as const,
 }
