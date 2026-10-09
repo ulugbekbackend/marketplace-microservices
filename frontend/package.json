@@ -11,13 +11,14 @@
     "dev:seller": "pnpm --filter seller dev",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck && tsc -p tsconfig.json",
-    "lint": "pnpm -r lint && eslint scripts eslint.config.js",
+    "lint": "pnpm -r lint && eslint scripts e2e playwright.config.ts eslint.config.js",
     "test": "pnpm -r test",
     "gen-api": "pnpm --filter @bozorcha/api-client gen-api",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "screenshots": "tsx scripts/screenshots.ts",
-    "screenshots:seller": "tsx scripts/seller-screenshots.ts"
+    "screenshots:seller": "tsx scripts/seller-screenshots.ts",
+    "test:e2e": "playwright test"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

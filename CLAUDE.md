@@ -24,9 +24,9 @@ make gen-api           # OpenAPI schemas -> frontend API types
 libs/contracts   event schemas (Pydantic), enums, money
 libs/py-common   outbox, consumer base, idempotency, logging, health, auth headers
 services/        auth, catalog, order (Django) | cart, search, payment, notification (FastAPI)
-frontend/        pnpm workspace: packages/{ui,api-client}, apps/{shop,seller}
+frontend/        pnpm workspace: packages/{ui,api-client}, apps/{shop,seller}, e2e (Playwright)
 tools/           payme-simulator, click-simulator, seed
-tests/           e2e (Playwright), integration (compose), load (k6)
+tests/           integration (compose), load (k6)
 infra/           docker-compose*, postgres, traefik, rabbitmq, monitoring
 ```
 
