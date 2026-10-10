@@ -2,7 +2,10 @@
 FROM python:3.12.14-slim-bookworm AS builder
 
 COPY --from=ghcr.io/astral-sh/uv:0.12.17 /uv /usr/local/bin/uv
+# phonenumbers ships very large data modules: compiling them can take over a minute on a busy
+# builder, past uv's 60 s default.
 ENV UV_COMPILE_BYTECODE=1 \
+    UV_COMPILE_BYTECODE_TIMEOUT=600 \
     UV_LINK_MODE=copy \
     UV_PYTHON_DOWNLOADS=never \
     UV_PROJECT_ENVIRONMENT=/opt/venv
