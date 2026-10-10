@@ -117,6 +117,9 @@ CELERY_BEAT_SCHEDULE: dict[str, dict[str, object]] = {
 # The mock payment endpoint exists only when this is on AND DEBUG is on.
 PAYMENT_MOCK_ENABLED = config("PAYMENT_MOCK_ENABLED", default=False, cast=bool)
 
+# /metrics of the order consumer (no web server of its own); 0 turns it off.
+CONSUMER_METRICS_PORT = config("CONSUMER_METRICS_PORT", default=9100, cast=int)
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 USE_TZ = True
 TIME_ZONE = "UTC"

@@ -20,6 +20,8 @@ def test_get_returns_the_gateway_user(client_for: ClientFor, customer: User) -> 
         "id": str(customer.id),
         "phone": customer.phone,
         "full_name": customer.full_name,
+        "email": "",
+        "telegram_chat_id": "",
         "role": "customer",
         "date_joined": response.json()["date_joined"],
     }
@@ -32,6 +34,42 @@ def test_patch_updates_the_full_name(client_for: ClientFor, customer: User) -> N
     assert response.json()["full_name"] == "Aziz Karimov"
     customer.refresh_from_db()
     assert customer.full_name == "Aziz Karimov"
+
+
+def test_patch_sets_the_notification_channels(client_for: ClientFor, customer: User) -> None:
+    response = client_for(customer).patch(
+        URL, {"email": " Aziz@Example.UZ ", "telegram_chat_id": "123456789"}, format="json"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["email"] == "aziz@example.uz"
+    assert response.json()["telegram_chat_id"] == "123456789"
+    customer.refresh_from_db()
+    assert (customer.email, customer.telegram_chat_id) == ("aziz@example.uz", "123456789")
+
+
+def test_patch_clears_a_channel_with_an_empty_value(client_for: ClientFor, customer: User) -> None:
+    customer.email = "old@example.uz"
+    customer.save(update_fields=["email"])
+
+    response = client_for(customer).patch(URL, {"email": ""}, format="json")
+
+    assert response.status_code == 200
+    customer.refresh_from_db()
+    assert customer.email == ""
+
+
+@pytest.mark.parametrize(
+    "body",
+    [{"email": "not-an-email"}, {"telegram_chat_id": "abc"}, {"telegram_chat_id": "1" * 21}],
+)
+def test_patch_rejects_invalid_channels(
+    client_for: ClientFor, customer: User, body: dict[str, str]
+) -> None:
+    response = client_for(customer).patch(URL, body, format="json")
+
+    assert response.status_code == 400
+    assert set(response.json()["error"]["details"]) == set(body)
 
 
 def test_patch_cannot_change_role_or_phone(client_for: ClientFor, customer: User) -> None:

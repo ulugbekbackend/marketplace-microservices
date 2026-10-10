@@ -1,9 +1,11 @@
 """The service answers liveness at the root and behind the gateway prefix."""
 
 from collections.abc import AsyncIterator
+from dataclasses import replace
 
 import pytest
-from app.main import app
+from app.core.config import load_settings
+from app.main import app, create_app
 from httpx import ASGITransport, AsyncClient
 
 
@@ -29,11 +31,20 @@ async def test_metrics_are_exposed(client: AsyncClient) -> None:
     assert "python_info" in response.text
 
 
-async def test_readiness_reports_dependencies(client: AsyncClient) -> None:
-    response = await client.get("/health/ready")
+@pytest.mark.parametrize(
+    ("rabbitmq_url", "checks"),
+    [("amqp://user:pw@rabbitmq:5672/", {"redis", "rabbitmq"}), ("", {"redis"})],
+)
+async def test_readiness_reports_dependencies(rabbitmq_url: str, checks: set[str]) -> None:
+    # Explicit settings: the result must not depend on the developer's .env.
+    app = create_app(
+        settings=replace(load_settings(), rabbitmq_url=rabbitmq_url), with_lifespan=False
+    )
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/health/ready")
 
-    assert response.status_code in (200, 503)
-    assert set(response.json()["checks"]) == {"redis", "rabbitmq"}
+    assert response.status_code == 503  # not started: Redis is not connected
+    assert set(response.json()["checks"]) == checks
 
 
 async def test_correlation_id_is_returned(client: AsyncClient) -> None:

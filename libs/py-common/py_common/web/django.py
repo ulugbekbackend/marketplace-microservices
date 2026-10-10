@@ -7,11 +7,11 @@ from uuid import UUID
 from asgiref.sync import async_to_sync
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.urls import path
-from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from contracts.headers import X_CORRELATION_ID, X_REQUEST_ID
 from py_common.context import request_context
 from py_common.health import HealthRegistry
+from py_common.metrics import CONTENT_TYPE_LATEST, latest
 
 
 def correlation_id_middleware(
@@ -52,7 +52,7 @@ def health_urlpatterns(registry: HealthRegistry, *, prefix: str = "") -> list[ob
         )
 
     def metrics(request: HttpRequest) -> HttpResponse:
-        return HttpResponse(generate_latest(), content_type=CONTENT_TYPE_LATEST)
+        return HttpResponse(latest(), content_type=CONTENT_TYPE_LATEST)
 
     return [
         path(f"{prefix}health/live", live),

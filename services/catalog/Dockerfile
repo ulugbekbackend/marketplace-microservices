@@ -31,4 +31,6 @@ EXPOSE 8000
 HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=5 \
     CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health/live', timeout=3).status == 200 else 1)"
 
-CMD ["sh", "-c", "python manage.py migrate --noinput && exec gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3 --access-logfile -"]
+# Several gunicorn workers: their Prometheus counters go to a shared directory, emptied at
+# start. Set here only, so the relay and consumer processes of this image stay single-process.
+CMD ["sh", "-c", "python manage.py migrate --noinput && export PROMETHEUS_MULTIPROC_DIR=/tmp/prometheus && rm -rf \"$PROMETHEUS_MULTIPROC_DIR\" && mkdir -p \"$PROMETHEUS_MULTIPROC_DIR\" && exec gunicorn -c python:py_common.web.gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3 --access-logfile -"]

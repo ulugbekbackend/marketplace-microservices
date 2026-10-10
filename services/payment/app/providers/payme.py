@@ -23,6 +23,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.metrics import PAYMENT_ERRORS
 from app.models import Transaction, TransactionState
 from app.services import payments
 from app.services.orders import OrderClient, OrderUnavailableError, Payable
@@ -157,9 +158,11 @@ class PaymeMerchant:
                 raise PaymeError(INVALID_REQUEST)
             result = await method(params)
         except PaymeError as error:
+            PAYMENT_ERRORS.labels(provider="payme", code=str(error.code)).inc()
             return {"jsonrpc": "2.0", "id": request_id, "error": error.body()}
         except OrderUnavailableError:
             logger.warning("order service unavailable for payme", exc_info=True)
+            PAYMENT_ERRORS.labels(provider="payme", code=str(SYSTEM_ERROR)).inc()
             return {"jsonrpc": "2.0", "id": request_id, "error": PaymeError(SYSTEM_ERROR).body()}
         return {"jsonrpc": "2.0", "id": request_id, "result": result}
 

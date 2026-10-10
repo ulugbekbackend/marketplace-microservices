@@ -18,6 +18,8 @@ export const sellerUser: User = {
   id: 'u1',
   phone: '+998901234567',
   full_name: 'Dilnoza',
+  email: '',
+  telegram_chat_id: '',
   role: 'seller',
   date_joined: '2026-09-01T00:00:00Z',
 }

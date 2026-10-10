@@ -1,5 +1,6 @@
 """Failure routing, dispatch and the consumer/relay loops, with the broker faked out."""
 
+import asyncio
 import threading
 from datetime import UTC, datetime
 from types import SimpleNamespace
@@ -17,6 +18,7 @@ from py_common.rabbit import (
     ERROR_HEADER,
     AioPikaConsumer,
     BlockingConsumer,
+    ConsumerRunner,
     PermanentError,
     envelope_properties,
     make_dispatch,
@@ -421,3 +423,104 @@ def test_relay_uses_idle_between_empty_batches() -> None:
 
     run_relay(lambda: 0, stop, interval=0.3, idle=idle)
     assert idled == [0.3]
+
+
+# --- ConsumerRunner watchdog ---------------------------------------------------------------
+
+
+async def _ignore(body: bytes) -> None:
+    return None
+
+
+class PassiveQueueChannel:
+    """``declare_queue(passive=True)`` answers, hangs or fails as the test needs."""
+
+    def __init__(self, *, consumers: int = 1, fail: bool = False, hang: bool = False) -> None:
+        self.is_closed = False
+        self.consumers = consumers
+        self.fail = fail
+        self.hang = hang
+        self.declared: list[tuple[str, bool]] = []
+
+    async def declare_queue(self, name: str, *, passive: bool) -> Any:
+        self.declared.append((name, passive))
+        if self.fail:
+            raise ConnectionError("channel is dead")
+        if self.hang:
+            await asyncio.sleep(10)
+        return SimpleNamespace(declaration_result=SimpleNamespace(consumer_count=self.consumers))
+
+
+def consumer_on(channel: Any) -> AioPikaConsumer:
+    instance = AioPikaConsumer("amqp://localhost/", "search", _ignore)
+    instance._channel = channel
+    return instance
+
+
+async def test_alive_asks_the_broker_about_our_own_queue() -> None:
+    channel = PassiveQueueChannel(consumers=1)
+
+    assert await consumer_on(channel).alive() is True
+    assert channel.declared == [("search.q", True)]
+
+
+@pytest.mark.parametrize(
+    "channel",
+    [
+        None,
+        PassiveQueueChannel(consumers=0),  # the subscription is gone
+        PassiveQueueChannel(fail=True),  # the channel is dead
+        PassiveQueueChannel(hang=True),  # stuck waiting for a reconnect that never comes
+    ],
+)
+async def test_alive_is_false_when_nothing_reads_the_queue(channel: Any) -> None:
+    assert await consumer_on(channel).alive(timeout=0.05) is False
+
+
+class LosingConsumer:
+    """Starts fine; the test flips ``healthy`` to simulate a subscription the broker lost."""
+
+    def __init__(self) -> None:
+        self.healthy = True
+        self.starts = 0
+        self.stops = 0
+
+    async def alive(self) -> bool:
+        return self.healthy
+
+    async def start(self) -> None:
+        self.starts += 1
+        self.healthy = True
+
+    async def stop(self) -> None:
+        self.stops += 1
+
+
+async def test_runner_restarts_a_consumer_that_lost_its_subscription() -> None:
+    consumer = LosingConsumer()
+    runner = ConsumerRunner(consumer, retry_seconds=0.01, watch_seconds=0.01)  # type: ignore[arg-type]
+    runner.start()
+    await asyncio.wait_for(runner.started.wait(), timeout=2)
+
+    consumer.healthy = False
+    for _ in range(200):
+        if runner.restarts:
+            break
+        await asyncio.sleep(0.01)
+    await runner.stop()
+
+    assert runner.restarts >= 1
+    assert consumer.starts >= 2
+    assert consumer.healthy is True
+
+
+async def test_runner_leaves_a_live_consumer_alone() -> None:
+    consumer = LosingConsumer()
+    runner = ConsumerRunner(consumer, watch_seconds=0.01)  # type: ignore[arg-type]
+    runner.start()
+    await asyncio.wait_for(runner.started.wait(), timeout=2)
+
+    await asyncio.sleep(0.1)
+    await runner.stop()
+
+    assert (runner.restarts, consumer.starts) == (0, 1)

@@ -1,0 +1,32 @@
+# Scrapes every service's /metrics on the compose network (profile: monitoring).
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: services
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - auth:8000
+          - catalog:8000
+          - order:8000
+          - cart:8000
+          - search:8000
+          - payment:8000
+          - notification:8000
+    relabel_configs:
+      # "order:8000" -> service="order"
+      - source_labels: [__address__]
+        regex: "([^:]+):.*"
+        target_label: service
+
+  - job_name: order-consumer
+    static_configs:
+      - targets: ["order-consumer:9100"]
+        labels:
+          service: order-consumer
+
+  - job_name: traefik
+    static_configs:
+      - targets: ["traefik:8082"]

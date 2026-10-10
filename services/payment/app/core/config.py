@@ -46,7 +46,9 @@ def load_settings() -> Settings:
         order_url=config("ORDER_INTERNAL_URL", default="http://order:8000"),
         order_timeout=config("ORDER_TIMEOUT", default=5.0, cast=float),
         shop_url=config("SHOP_URL", default="http://shop.localhost"),
-        mock_enabled=config("PAYMENT_MOCK_ENABLED", default=False, cast=bool),
+        # The mock provider pays without money: never outside DEBUG, whatever the flag says.
+        mock_enabled=config("PAYMENT_MOCK_ENABLED", default=False, cast=bool)
+        and config("DEBUG", default=False, cast=bool),
         payme_merchant_id=config("PAYME_MERCHANT_ID", default=""),
         payme_key=config("PAYME_KEY", default=""),
         payme_checkout_url=config("PAYME_CHECKOUT_URL", default=""),

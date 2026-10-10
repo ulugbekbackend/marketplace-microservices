@@ -317,6 +317,8 @@ export const customer = {
   id: 'u1',
   phone: '+998901112233',
   full_name: 'Aziza Karimova',
+  email: '',
+  telegram_chat_id: '',
   role: 'customer',
 }
 

@@ -293,8 +293,11 @@ export type components = {
       page_size: number
       total: number
     }
+    /** @description Every field is optional (PATCH); an empty email or chat id switches that channel off. */
     PatchedUserUpdateRequest: {
+      email?: string
       full_name?: string
+      telegram_chat_id?: string
     }
     RefreshRequest: {
       refresh: string
@@ -337,11 +340,14 @@ export type components = {
     User: {
       /** Format: date-time */
       readonly date_joined: string
+      /** Format: email */
+      readonly email: string
       readonly full_name: string
       /** Format: uuid */
       readonly id: string
       readonly phone: string
       readonly role: components['schemas']['RoleEnum']
+      readonly telegram_chat_id: string
     }
   }
   responses: never

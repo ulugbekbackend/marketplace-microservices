@@ -1,0 +1,191 @@
+# Lint, unit tests and type checks for what a change touched. System tests (gateway, saga,
+# payments, notifications) and the Playwright e2e need the whole stack and run locally:
+# make up && make test-integration && make test-e2e.
+name: CI
+
+on:
+  push:
+    branches: [main, dev, "feature/**", "fix/**", "refactor/**", "hotfix/**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_VERSION: "0.12.17"
+  PYTHON_VERSION: "3.12.14"
+  NODE_VERSION: "24.21.0"
+
+jobs:
+  changes:
+    runs-on: ubuntu-24.04
+    outputs:
+      services: ${{ steps.plan.outputs.services }}
+      search: ${{ steps.plan.outputs.search }}
+      libs: ${{ steps.filter.outputs.libs }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        id: filter
+        with:
+          filters: |
+            libs: [libs/**, tools/**, pyproject.toml, uv.lock, .github/workflows/ci.yml]
+            auth: [services/auth/**]
+            catalog: [services/catalog/**]
+            order: [services/order/**]
+            cart: [services/cart/**]
+            search: [services/search/**]
+            payment: [services/payment/**]
+            notification: [services/notification/**]
+            frontend: [frontend/**, .github/workflows/ci.yml]
+      - id: plan
+        name: Services to test (all of them when the shared code changed)
+        env:
+          CHANGES: ${{ steps.filter.outputs.changes }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          changed = set(json.loads(os.environ["CHANGES"]))
+          every = ["auth", "catalog", "order", "cart", "payment", "notification"]
+          picked = every if "libs" in changed else [s for s in every if s in changed]
+          search = "libs" in changed or "search" in changed
+          with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+              out.write(f"services={json.dumps(picked)}\n")
+              out.write(f"search={'true' if search else 'false'}\n")
+          PY
+
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: uv sync --frozen --all-packages
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - name: Dockerfiles run as non-root from pinned images
+        run: uv run python tools/check_dockerfiles.py
+      - name: No secrets committed, .env.example complete
+        run: uv run python tools/check_secrets.py
+
+  libs:
+    needs: changes
+    if: needs.changes.outputs.libs == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: uv sync --frozen --all-packages
+      - run: uv run pytest libs tools/tests
+      - run: uv run mypy libs tools
+
+  python:
+    needs: changes
+    if: needs.changes.outputs.services != '[]'
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ${{ fromJSON(needs.changes.outputs.services) }}
+    services:
+      postgres:
+        image: postgres:16.15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-retries 20
+      redis:
+        image: redis:7.4.11-alpine
+        ports: ["6379:6379"]
+        options: --health-cmd "redis-cli ping" --health-interval 5s --health-retries 20
+    env:
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: "5432"
+      DB_PASSWORD: ci-password
+      REDIS_URL: redis://localhost:6379/0
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: One database and owner per service (same script as the compose Postgres)
+        env:
+          PGHOST: localhost
+          PGPASSWORD: postgres
+          POSTGRES_USER: postgres
+        run: sh infra/postgres/init.sh
+      - run: uv sync --frozen --all-packages
+      - name: Tests
+        working-directory: services/${{ matrix.service }}
+        run: uv run --project . pytest
+      - name: Types
+        working-directory: services/${{ matrix.service }}
+        run: uv run --project . mypy .
+
+  search:
+    needs: changes
+    if: needs.changes.outputs.search == 'true'
+    runs-on: ubuntu-24.04
+    services:
+      elasticsearch:
+        image: elasticsearch:8.19.21
+        env:
+          discovery.type: single-node
+          xpack.security.enabled: "false"
+          ES_JAVA_OPTS: -Xms512m -Xmx512m
+        ports: ["9200:9200"]
+        options: >-
+          --health-cmd "curl -sf http://localhost:9200/_cluster/health"
+          --health-interval 10s --health-retries 30
+    env:
+      SEARCH_TEST_ELASTICSEARCH_URL: http://localhost:9200
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: uv sync --frozen --all-packages
+      - name: Tests
+        working-directory: services/search
+        run: uv run --project . pytest
+      - name: Types
+        working-directory: services/search
+        run: uv run --project . mypy .
+
+  frontend:
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: frontend/package.json
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm format:check
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test
+      - run: pnpm build

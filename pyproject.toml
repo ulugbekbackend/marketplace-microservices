@@ -13,6 +13,7 @@ dev = [
     "ruff==0.16.8",
     "mypy==2.3.1",
     "pre-commit==4.6.2",
+    "matplotlib==3.11.2",
     "uv==0.12.17",
     "django-stubs==5.2.9",
     "djangorestframework-stubs==3.16.9",
@@ -22,7 +23,7 @@ dev = [
 package = false
 
 [tool.uv.workspace]
-members = ["libs/*", "services/*", "tools/*"]
+members = ["libs/*", "services/*", "tools/simulator-kit", "tools/*-simulator"]
 
 [tool.uv.sources]
 contracts = { workspace = true }

@@ -183,6 +183,9 @@ class FlakyConsumer:
         self.starts = 0
         self.stops = 0
 
+    async def alive(self) -> bool:
+        return True
+
     async def start(self) -> None:
         self.starts += 1
         if self.starts <= self.failures:

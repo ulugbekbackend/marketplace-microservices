@@ -140,9 +140,12 @@ def test_consumer_reads_the_order_queue_and_feeds_the_saga(
             self.handle(event.model_dump_json().encode())
 
     monkeypatch.setattr(consume_events, "BlockingConsumer", FakeConsumer)
+    metrics_ports: list[int] = []
+    monkeypatch.setattr(consume_events, "serve", metrics_ports.append)
 
     call_command("consume_events")
 
     assert started == {"url": RABBIT, "service": "order", "stop": stop}
+    assert metrics_ports == [9100]
     assert Order.objects.get(id=order.id).status == OrderStatus.RESERVED.value
     assert recycled_connections == [consume_events.__name__]
