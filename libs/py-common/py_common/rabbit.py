@@ -386,6 +386,24 @@ class AioPikaConsumer:
         self._connection: AbstractRobustConnection | None = None
         self._channel: AbstractChannel | None = None
 
+    async def alive(self, timeout: float = 5.0) -> bool:
+        """Ask the broker, over our own channel, whether the queue still has a consumer.
+
+        The client side flags cannot be trusted: after a forced disconnect whose robust
+        restore failed, the connection and channel report neither closed nor broken while
+        nothing reads the queue. A passive declare on our channel fails or hangs when the
+        channel is dead, and reports zero consumers when the subscription is gone.
+        """
+        if self._channel is None or self._channel.is_closed:
+            return False
+        try:
+            queue = await asyncio.wait_for(
+                self._channel.declare_queue(queue_name(self.service), passive=True), timeout
+            )
+        except Exception:
+            return False
+        return bool(queue.declaration_result.consumer_count)
+
     async def start(self) -> None:
         self._connection = await aio_pika.connect_robust(self._url)
         self._channel = await self._connection.channel(publisher_confirms=True)
@@ -448,6 +466,7 @@ class ConsumerRunner:
         probe: CheckFn | None = None,
         retry_seconds: float = 5.0,
         stop_timeout: float = 5.0,
+        watch_seconds: float = 15.0,
         name: str = "event-consumer",
     ) -> None:
         self._consumer = consumer
@@ -455,11 +474,17 @@ class ConsumerRunner:
         self._probe = probe
         self._retry_seconds = retry_seconds
         self._stop_timeout = stop_timeout
+        self._watch_seconds = watch_seconds
         self._task: asyncio.Task[None] | None = None
         self.started = asyncio.Event()
+        self.restarts = 0
 
     def start(self) -> None:
-        self._task = asyncio.create_task(self._start_loop(), name=self._name)
+        self._task = asyncio.create_task(self._run(), name=self._name)
+
+    async def _run(self) -> None:
+        await self._start_loop()
+        await self._watch()
 
     async def _start_loop(self) -> None:
         while True:
@@ -474,6 +499,30 @@ class ConsumerRunner:
             else:
                 self.started.set()
                 return
+
+    async def _watch(self) -> None:
+        """Restart the consumer when its channel stays closed.
+
+        aio-pika's robust connection usually restores the channel and the consumer by
+        itself, but when the restore fails the service keeps answering HTTP while nothing
+        reads its queue. Two failed checks in a row (one may catch a reconnect in progress)
+        start the consumer again from scratch.
+        """
+        unhealthy = 0
+        while True:
+            await asyncio.sleep(self._watch_seconds)
+            if await self._consumer.alive():
+                unhealthy = 0
+                continue
+            unhealthy += 1
+            if unhealthy < 2:
+                continue
+            logger.warning("consumer lost its channel, restarting it")
+            self.started.clear()
+            await self._consumer.stop()
+            await self._start_loop()
+            self.restarts += 1
+            unhealthy = 0
 
     async def stop(self) -> None:
         if self._task is not None:
