@@ -17,7 +17,7 @@ from click_simulator import run as run_click
 from payme_simulator import PaymeClient, new_tx_id, now_ms
 from payme_simulator import run as run_payme
 from simulator_kit import ROOT, Order, Shopper
-from test_saga import GATEWAY, EventTap, broker_url, env
+from test_saga import GATEWAY, EventTap, broker_url, env, wait_until
 from test_search_sync import Seller
 
 from contracts.enums import EventType
@@ -138,6 +138,19 @@ def this_week_payout(seller: Seller) -> dict[str, Any] | None:
     return None
 
 
+def build_this_weeks_payouts() -> None:
+    subprocess.run(
+        [
+            "docker", "compose", "-f", "infra/docker-compose.yml", "--env-file", ".env",
+            "exec", "-T", "payment", "python", "-m", "app.payouts", "run",
+            "--week", datetime.now(UTC).date().isoformat(),
+        ],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+    )  # fmt: skip
+
+
 def test_seller_cancel_refunds_the_customer(tap: EventTap, seller: Seller, buyer: Shopper) -> None:
     order = buyer.reserved_order(SHOP.shop_name)
     pay(buyer, order)
@@ -158,23 +171,17 @@ def test_delivered_sub_order_joins_the_weekly_payout(seller: Seller, buyer: Shop
     set_status(seller, sub_order["id"], "ACCEPTED")
     set_status(seller, sub_order["id"], "SHIPPED", tracking_number="TRK-SIM-1")
     set_status(seller, sub_order["id"], "DELIVERED")
-    time.sleep(2)  # sub_order.status_changed reaches the payment consumer
-
-    subprocess.run(
-        [
-            "docker", "compose", "-f", "infra/docker-compose.yml", "--env-file", ".env",
-            "exec", "-T", "payment", "python", "-m", "app.payouts", "run",
-            "--week", datetime.now(UTC).date().isoformat(),
-        ],
-        cwd=ROOT,
-        check=True,
-        capture_output=True,
-    )  # fmt: skip
-
-    after = this_week_payout(seller)
-    assert after is not None
     net_before = before["net_tiyin"] if before else 0
     lines_before = before["lines_count"] if before else 0
+
+    def payout_with_the_line() -> dict[str, Any] | None:
+        # The DELIVERED event reaches the payment consumer asynchronously: build the week's
+        # payouts until the line has joined (the command only adds new lines).
+        build_this_weeks_payouts()
+        payout = this_week_payout(seller)
+        return payout if payout and payout["lines_count"] > lines_before else None
+
+    after = wait_until(payout_with_the_line, "the delivered sub-order in this week's payout")
     assert after["net_tiyin"] - net_before == sub_order["net_tiyin"]
     assert after["lines_count"] - lines_before == 1
     assert after["status"] == "pending"
