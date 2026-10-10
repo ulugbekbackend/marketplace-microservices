@@ -6,7 +6,9 @@ import { deflateSync, crc32 } from 'node:zlib'
 import { expect, test } from '@playwright/test'
 import {
   api,
+  closeContexts,
   inSearch,
+  newContext,
   createProduct,
   freshPhone,
   issueTokens,
@@ -19,6 +21,8 @@ import {
   SHOP,
   waitFor,
 } from './helpers'
+
+test.afterEach(closeContexts)
 
 /** A solid colour PNG, built in memory so the repository holds no binary fixture. */
 function png(width: number, height: number, [r, g, b]: [number, number, number]): Buffer {
@@ -94,7 +98,7 @@ test('seller: a new product with variants and an image is searchable within 10 s
   console.log(`searchable after ${foundAt - savedAt} ms`)
   expect(foundAt - savedAt).toBeLessThan(10_000)
 
-  const shop = await (await browser.newContext()).newPage()
+  const shop = await (await newContext(browser)).newPage()
   await shop.goto(`${SHOP}/catalog?q=${encodeURIComponent(title)}`)
   await expect(shop.getByRole('link', { name: title }).first()).toBeVisible()
   await shot(shop, '2-shop-search')

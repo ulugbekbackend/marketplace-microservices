@@ -19,6 +19,9 @@ export default defineConfig({
   reporter: [['list']],
   use: {
     viewport: { width: 1280, height: 900 },
+    // Chromium resolves *.localhost to ::1 too; Docker Desktop's IPv6 port forward resets
+    // connections under load, so the browser goes to the gateway over IPv4 like the API does.
+    launchOptions: { args: ['--host-resolver-rules=MAP *.localhost 127.0.0.1'] },
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },

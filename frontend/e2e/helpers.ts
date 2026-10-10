@@ -54,9 +54,23 @@ export function freshPhone(): string {
   return `+99890${String(Math.floor(1_000_000 + Math.random() * 8_999_999))}`
 }
 
+/** Contexts a test opened; `closeContexts` (an afterEach hook) closes them. */
+const openContexts: BrowserContext[] = []
+
+/** A fresh browser context that is closed after the test (pages left open keep polling). */
+export async function newContext(browser: Browser): Promise<BrowserContext> {
+  const context = await browser.newContext()
+  openContexts.push(context)
+  return context
+}
+
+export async function closeContexts(): Promise<void> {
+  await Promise.all(openContexts.splice(0).map((context) => context.close()))
+}
+
 /** A browser context that starts signed in as `user` (the app refreshes the stored token). */
 export async function signedInContext(browser: Browser, user: TestUser): Promise<BrowserContext> {
-  const context = await browser.newContext()
+  const context = await newContext(browser)
   // Only the first load: later loads must keep the token the app rotated.
   await context.addInitScript((token) => {
     if (!localStorage.getItem('bozorcha.refresh')) localStorage.setItem('bozorcha.refresh', token)

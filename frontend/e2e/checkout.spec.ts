@@ -5,6 +5,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import {
   api,
+  closeContexts,
   inSearch,
   createProduct,
   freshPhone,
@@ -16,6 +17,8 @@ import {
   SHOP,
   waitFor,
 } from './helpers'
+
+test.afterEach(closeContexts)
 
 /** The checkout form; the phone may already be filled in from the profile. */
 async function fillCheckout(page: Page, name: string): Promise<void> {
