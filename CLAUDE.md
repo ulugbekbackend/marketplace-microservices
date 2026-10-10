@@ -4,7 +4,7 @@ Multi-vendor marketplace, microservices in a monorepo (portfolio project).
 The full specification, the task list and the progress journal are kept locally, outside
 version control.
 
-**Current phase:** P5 done: payment service (Payme Merchant API, Click SHOP API, mock provider, outbox), Payme and Click simulators with system tests, refunds and weekly seller payouts, payment methods and result page in the shop, payouts page in the seller cabinet; object storage moved to RustFS. Next is P6 — Notification, quality, CI, monitoring.
+**Current phase:** P6 done: notification service (SMS, email, Telegram), Playwright e2e (4 scenarios), Prometheus metrics and Grafana, GitHub Actions CI, k6 overselling test, security checks and the final README. All phases complete.
 
 ## Commands
 Toolchain is project-local (no global installs): `source .tools/env.sh` (bash) or `. .\.tools\env.ps1` first.
@@ -28,6 +28,7 @@ frontend/        pnpm workspace: packages/{ui,api-client}, apps/{shop,seller}, e
 tools/           payme-simulator, click-simulator, seed
 tests/           integration (compose), load (k6)
 infra/           docker-compose*, postgres, traefik, rabbitmq, monitoring
+assets/readme/   the images the README shows
 ```
 
 ## Conventions
@@ -42,5 +43,6 @@ infra/           docker-compose*, postgres, traefik, rabbitmq, monitoring
 Only the app and what production needs is committed, together with the agent definitions
 and skills under `.claude/`. Dev configs, virtual environments and `.tools/` are ignored.
 
-Planning notes, test reports and screenshots are kept locally and never committed; apart
-from `.gitignore`, no committed file refers to them by name.
+Planning notes, test reports and screenshots are kept locally and never committed (the
+README's own images live in `assets/readme/`); apart from `.gitignore`, no committed file
+refers to the local notes by name.
