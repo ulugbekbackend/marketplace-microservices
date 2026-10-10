@@ -7,7 +7,7 @@ PY_SERVICES := auth catalog order cart search payment notification
 
 .DEFAULT_GOAL := help
 .PHONY: help up up-full down logs ps build migrate seed reindex \
-        test test-libs test-integration test-e2e payme-sim click-sim lint fmt typecheck gen-rabbit gen-api \
+        test test-libs test-integration test-e2e load-test payme-sim click-sim lint fmt typecheck gen-rabbit gen-api \
         keys clean
 
 help: ## Show available targets
@@ -65,6 +65,12 @@ test-integration: ## Gateway and system tests against the running stack
 
 test-e2e: ## Playwright scenarios against the running stack (DEBUG=True, seeded)
 	cd frontend && pnpm test:e2e
+
+load-test: ## k6 overselling test against the running stack (DEBUG=True, seeded)
+	uv run python tests/load/prepare.py
+	MSYS_NO_PATHCONV=1 docker run --rm --network marketplace_edge 		-v "$(CURDIR)/tests/load:/load" -w /load grafana/k6:2.3.0 		run --quiet --out json=results/raw.json checkout_oversell.js
+	uv run python tests/load/verify.py
+	uv run python tests/load/plot.py
 
 payme-sim: ## Play Payme against the running stack: make payme-sim [s="happy bad-auth"]
 	uv run python -m payme_simulator $(s)
