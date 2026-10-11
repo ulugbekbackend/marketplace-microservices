@@ -43,6 +43,7 @@ async def run(settings: Settings) -> int:
                     "indexed": result.indexed,
                     "stale": result.stale,
                     "skipped": result.skipped,
+                    "tombstones": result.tombstones,
                     "removed_indices": result.removed_indices,
                 }
             )

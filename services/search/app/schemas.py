@@ -1,5 +1,7 @@
 """Response bodies of the search API. Money is integer tiyin."""
 
+from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -68,9 +70,22 @@ class SuggestResponse(BaseModel):
     items: list[Suggestion]
 
 
-class ReindexResponse(BaseModel):
+class ReindexResult(BaseModel):
     index: str
     indexed: int
     stale: int = Field(description="Documents an event had already replaced with a newer one.")
     skipped: int = Field(description="Catalog documents that failed validation.")
+    tombstones: int = Field(description="Deleted products carried over from the old index.")
     removed_indices: list[str]
+
+
+class ReindexJobResponse(BaseModel):
+    job_id: str
+    status: Literal["running", "done", "failed"]
+    started_at: datetime
+    finished_at: datetime | None = None
+    result: ReindexResult | None = None
+    error_code: str | None = Field(
+        default=None, description="CATALOG_UNAVAILABLE, REINDEX_INTERRUPTED or REINDEX_FAILED."
+    )
+    error: str | None = None
