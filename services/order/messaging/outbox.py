@@ -3,12 +3,13 @@
 from collections.abc import Iterable, Sequence
 from uuid import UUID
 
-from django.db import transaction
+from django.db import connection, transaction
 from django.utils import timezone
 
 from contracts.events import EventEnvelope
 from messaging.models import Outbox, ProcessedEvent
 from py_common.outbox import PendingEvent
+from py_common.outbox_notify import NOTIFY_SQL
 
 #: The ``producer`` field of every envelope this service publishes.
 PRODUCER = "order"
@@ -22,7 +23,7 @@ def add_to_outbox(envelope: EventEnvelope) -> Outbox:
     """Store an event in the current transaction. Refuses to run in autocommit mode."""
     if not transaction.get_connection().in_atomic_block:
         raise OutsideTransactionError("add_to_outbox() must be called inside transaction.atomic")
-    return Outbox.objects.create(
+    row = Outbox.objects.create(
         event_id=envelope.event_id,
         event_type=envelope.event_type.value,
         correlation_id=envelope.correlation_id,
@@ -30,6 +31,10 @@ def add_to_outbox(envelope: EventEnvelope) -> Outbox:
         version=envelope.version,
         payload=envelope.payload,
     )
+    # Wakes the relay at commit; dropped with the row on rollback.
+    with connection.cursor() as cursor:
+        cursor.execute(NOTIFY_SQL)
+    return row
 
 
 def to_envelope(row: Outbox, *, producer: str = PRODUCER) -> EventEnvelope:

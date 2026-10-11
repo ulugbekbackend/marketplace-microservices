@@ -3,15 +3,20 @@ transaction, ``OutboxRelay`` publishes unpublished rows in the background.
 
 A row is stamped only after the broker confirmed it, so a crash means a duplicate
 delivery, never a lost event. Consumers are idempotent by ``event_id``.
+
+The relay runs in this process, so a commit that carried outbox rows wakes it at once;
+the interval only bounds the wait when nothing commits.
 """
 
 import asyncio
+import contextlib
 import logging
 from datetime import UTC, datetime
 from typing import Protocol
 
-from sqlalchemy import select, update
+from sqlalchemy import event, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.orm import Session
 
 from app.models import Outbox
 from contracts.events import EventEnvelope, Frozen, build_event
@@ -25,6 +30,24 @@ PRODUCER = "payment"
 
 #: Longest pause between relay attempts while the database or broker keeps failing.
 MAX_BACKOFF_SECONDS = 30.0
+
+#: ``Session.info`` flag: this transaction added outbox rows.
+_PENDING_FLAG = "outbox_pending"
+
+#: Running relays, woken after every commit that added outbox rows.
+_relays: set["OutboxRelay"] = set()
+
+
+@event.listens_for(Session, "after_commit")
+def _wake_relays(session: Session) -> None:
+    if session.info.pop(_PENDING_FLAG, False):
+        for relay in _relays:
+            relay.wake()
+
+
+@event.listens_for(Session, "after_rollback")
+def _forget_rows(session: Session) -> None:
+    session.info.pop(_PENDING_FLAG, None)
 
 
 class AsyncPublisher(Protocol):
@@ -48,6 +71,7 @@ def add_event(session: AsyncSession, payload: Frozen, *, now: datetime | None = 
         payload=envelope.payload,
     )
     session.add(row)
+    session.info[_PENDING_FLAG] = True
     return row
 
 
@@ -113,9 +137,20 @@ class OutboxRelay:
         self._interval = interval
         self._batch = batch
         self._task: asyncio.Task[None] | None = None
+        self._woken = asyncio.Event()
 
     def start(self) -> None:
+        _relays.add(self)
         self._task = asyncio.create_task(self._loop(), name="payment-outbox-relay")
+
+    def wake(self) -> None:
+        """Cut the current wait short: new rows were committed."""
+        self._woken.set()
+
+    async def _idle(self) -> None:
+        with contextlib.suppress(TimeoutError):
+            await asyncio.wait_for(self._woken.wait(), timeout=self._interval)
+        self._woken.clear()
 
     async def _loop(self) -> None:
         failures = 0
@@ -137,9 +172,10 @@ class OutboxRelay:
                 logger.info("outbox relay recovered", extra={"failures": failures})
                 failures = 0
             if count < self._batch:
-                await asyncio.sleep(self._interval)
+                await self._idle()
 
     async def stop(self) -> None:
+        _relays.discard(self)
         if self._task is not None:
             self._task.cancel()
             await asyncio.gather(self._task, return_exceptions=True)

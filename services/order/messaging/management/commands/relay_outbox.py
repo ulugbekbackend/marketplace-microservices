@@ -8,6 +8,7 @@ from django.db import close_old_connections, transaction
 
 from messaging.outbox import DjangoOutboxStore
 from py_common.outbox import Publisher, publish_pending
+from py_common.outbox_notify import NotifyWaiter, django_conninfo
 from py_common.rabbit import PikaPublisher, run_relay, stop_on_signals
 
 
@@ -24,18 +25,29 @@ class Command(BaseCommand):
     def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument("--batch-size", type=int, default=settings.OUTBOX_RELAY_BATCH_SIZE)
         parser.add_argument(
-            "--interval", type=float, default=settings.OUTBOX_RELAY_INTERVAL_SECONDS
+            "--interval",
+            type=float,
+            default=settings.OUTBOX_RELAY_INTERVAL_SECONDS,
+            help="Longest wait after an empty batch; a committed outbox row ends it early.",
         )
 
     def handle(self, *args: Any, **options: Any) -> None:
         limit: int = options["batch_size"]
         publisher = PikaPublisher(settings.RABBITMQ_URL)
+        waiter = NotifyWaiter(django_conninfo())
+
+        def idle(seconds: float) -> None:
+            waiter.wait(seconds)
+            # Answer broker heartbeats the wait did not.
+            publisher.idle(0)
+
         try:
             run_relay(
                 lambda: publish_batch(publisher, limit=limit),
                 stop_on_signals(),
                 interval=options["interval"],
-                idle=publisher.idle,
+                idle=idle,
             )
         finally:
+            waiter.close()
             publisher.close()

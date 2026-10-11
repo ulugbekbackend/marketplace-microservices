@@ -261,7 +261,7 @@ dependencies = [
     { name = "phonenumbers" },
     { name = "prometheus-client" },
     { name = "psycopg", extra = ["binary"] },
-    { name = "py-common", extra = ["drf", "rabbit"] },
+    { name = "py-common", extra = ["drf", "pg", "rabbit"] },
     { name = "python-decouple" },
     { name = "redis" },
     { name = "whitenoise" },
@@ -286,7 +286,7 @@ requires-dist = [
     { name = "phonenumbers", specifier = "==9.0.39" },
     { name = "prometheus-client", specifier = "==0.26.0" },
     { name = "psycopg", extras = ["binary"], specifier = "==3.3.6" },
-    { name = "py-common", extras = ["drf", "rabbit"], editable = "libs/py-common" },
+    { name = "py-common", extras = ["drf", "rabbit", "pg"], editable = "libs/py-common" },
     { name = "python-decouple", specifier = "==3.8" },
     { name = "redis", specifier = "==8.1.0" },
     { name = "whitenoise", specifier = "==6.12.0" },
@@ -402,7 +402,7 @@ dependencies = [
     { name = "pillow" },
     { name = "prometheus-client" },
     { name = "psycopg", extra = ["binary"] },
-    { name = "py-common", extra = ["drf", "rabbit"] },
+    { name = "py-common", extra = ["drf", "pg", "rabbit"] },
     { name = "python-decouple" },
     { name = "redis" },
     { name = "unidecode" },
@@ -431,7 +431,7 @@ requires-dist = [
     { name = "pillow", specifier = "==12.3.0" },
     { name = "prometheus-client", specifier = "==0.26.0" },
     { name = "psycopg", extras = ["binary"], specifier = "==3.3.6" },
-    { name = "py-common", extras = ["drf", "rabbit"], editable = "libs/py-common" },
+    { name = "py-common", extras = ["drf", "rabbit", "pg"], editable = "libs/py-common" },
     { name = "python-decouple", specifier = "==3.8" },
     { name = "redis", specifier = "==8.1.0" },
     { name = "unidecode", specifier = "==1.4.0" },
@@ -1501,7 +1501,7 @@ dependencies = [
     { name = "httpx" },
     { name = "prometheus-client" },
     { name = "psycopg", extra = ["binary"] },
-    { name = "py-common", extra = ["drf", "rabbit", "redis"] },
+    { name = "py-common", extra = ["drf", "pg", "rabbit", "redis"] },
     { name = "python-decouple" },
     { name = "redis" },
 ]
@@ -1525,7 +1525,7 @@ requires-dist = [
     { name = "httpx", specifier = "==0.28.1" },
     { name = "prometheus-client", specifier = "==0.26.0" },
     { name = "psycopg", extras = ["binary"], specifier = "==3.3.6" },
-    { name = "py-common", extras = ["drf", "redis", "rabbit"], editable = "libs/py-common" },
+    { name = "py-common", extras = ["drf", "redis", "rabbit", "pg"], editable = "libs/py-common" },
     { name = "python-decouple", specifier = "==3.8" },
     { name = "redis", specifier = "==8.1.0" },
 ]
@@ -1789,6 +1789,9 @@ drf = [
     { name = "django" },
     { name = "djangorestframework" },
 ]
+pg = [
+    { name = "psycopg", extra = ["binary"] },
+]
 rabbit = [
     { name = "aio-pika" },
     { name = "pika" },
@@ -1809,10 +1812,11 @@ requires-dist = [
     { name = "pika", marker = "extra == 'rabbit'", specifier = "==1.4.4" },
     { name = "prometheus-client", specifier = "==0.26.0" },
     { name = "prometheus-client", marker = "extra == 'web'", specifier = "==0.26.0" },
+    { name = "psycopg", extras = ["binary"], marker = "extra == 'pg'", specifier = "==3.3.6" },
     { name = "pydantic", specifier = "==2.13.5" },
     { name = "redis", marker = "extra == 'redis'", specifier = "==8.1.0" },
 ]
-provides-extras = ["redis", "rabbit", "web", "drf"]
+provides-extras = ["redis", "rabbit", "web", "drf", "pg"]
 
 [[package]]
 name = "py-partiql-parser"
