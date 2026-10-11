@@ -83,6 +83,9 @@ services:
 
   rabbitmq:
     image: rabbitmq:4.3.6-management-alpine
+    # The node name (rabbit@<hostname>) picks the data directory in the volume: a fixed
+    # hostname keeps queues and definitions when the container is recreated.
+    hostname: rabbitmq
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
