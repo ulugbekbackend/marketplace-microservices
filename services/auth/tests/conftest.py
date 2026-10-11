@@ -63,6 +63,15 @@ def _jwt_settings(settings: Settings, jwt_keys: KeyPair) -> None:
 
 
 @pytest.fixture(autouse=True)
+def _plain_static_storage(settings: Settings) -> None:
+    """Admin pages render without the manifest collectstatic writes into the image."""
+    settings.STORAGES = {
+        **settings.STORAGES,
+        "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+    }
+
+
+@pytest.fixture(autouse=True)
 def fake_redis(monkeypatch: pytest.MonkeyPatch) -> Iterator[fakeredis.FakeRedis]:
     client = fakeredis.FakeRedis(decode_responses=True)
     monkeypatch.setattr(redis_client, "_client", client)
