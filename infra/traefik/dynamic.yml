@@ -46,3 +46,11 @@ http:
         accessControlExposeHeaders: ["Idempotent-Replayed", "X-Request-Id"]
         accessControlAllowCredentials: true
         accessControlMaxAge: 600
+
+    # Operator panels (Traefik dashboard, Prometheus, Grafana). The file is written by
+    # `make keys`; the header is dropped so the panel behind never sees these credentials.
+    ops-auth:
+      basicAuth:
+        usersFile: /etc/traefik/ops.htpasswd
+        realm: marketplace-ops
+        removeHeader: true
