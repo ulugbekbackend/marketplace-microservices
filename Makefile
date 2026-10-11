@@ -2,7 +2,9 @@ SHELL := /bin/sh
 -include .env
 HOST_POSTGRES_PORT ?= 5432
 HOST_REDIS_PORT ?= 6379
-COMPOSE := docker compose -f infra/docker-compose.yml --env-file .env
+# The local override (source mounts, reload, host ports) is picked up when it exists.
+COMPOSE_OVERRIDE := $(wildcard infra/docker-compose.override.yml)
+COMPOSE := docker compose -f infra/docker-compose.yml $(addprefix -f ,$(COMPOSE_OVERRIDE)) --env-file .env
 PY_SERVICES := auth catalog order cart search payment notification
 
 .DEFAULT_GOAL := help
