@@ -9,6 +9,11 @@ export default defineConfig({
     strictPort: true,
     host: true,
     allowedHosts: ['seller.localhost'],
+    // The API goes through the local gateway on the dev server's own origin: no CORS, and
+    // cookies stay first-party.
+    proxy: {
+      '/api': { target: 'http://127.0.0.1', headers: { host: 'seller.localhost' } },
+    },
   },
   preview: {
     port: 4174,

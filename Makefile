@@ -2,7 +2,10 @@ SHELL := /bin/sh
 -include .env
 HOST_POSTGRES_PORT ?= 5432
 HOST_REDIS_PORT ?= 6379
-COMPOSE := docker compose -f infra/docker-compose.yml --env-file .env
+# The local override (source mounts, reload, host ports) is picked up when it exists.
+COMPOSE_OVERRIDE := $(wildcard infra/docker-compose.override.yml)
+COMPOSE := docker compose -f infra/docker-compose.yml $(addprefix -f ,$(COMPOSE_OVERRIDE)) --env-file .env
+OPS_USER ?= ops
 PY_SERVICES := auth catalog order cart search payment notification
 
 .DEFAULT_GOAL := help
@@ -13,10 +16,13 @@ PY_SERVICES := auth catalog order cart search payment notification
 help: ## Show available targets
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | sort | awk -F':.*?## ' '{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
 
-keys: ## Create the RS256 key pair auth signs tokens with (kept out of git)
+keys: export OPS_PASSWORD := $(OPS_PASSWORD)
+keys: ## Create the RS256 key pair auth signs tokens with and the operator panel login (kept out of git)
 	@mkdir -p infra/secrets
 	@test -f infra/secrets/jwt_private.pem || openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out infra/secrets/jwt_private.pem
 	@openssl rsa -in infra/secrets/jwt_private.pem -pubout -out infra/secrets/jwt_public.pem 2>/dev/null
+	@test -n "$$OPS_PASSWORD" || { echo "OPS_PASSWORD is not set in .env"; exit 1; }
+	@printf '%s:%s\n' "$(OPS_USER)" "$$(printf '%s' "$$OPS_PASSWORD" | openssl passwd -apr1 -stdin)" > infra/secrets/ops.htpasswd
 	@echo "keys ready in infra/secrets/"
 
 up: keys ## Start the stack (infrastructure + services)

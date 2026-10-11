@@ -28,6 +28,8 @@ COPY --from=builder /opt/venv /opt/venv
 
 WORKDIR /app
 COPY services/auth/ ./
+# Django admin assets, served by WhiteNoise.
+RUN python manage.py collectstatic --noinput
 USER app
 EXPOSE 8000
 

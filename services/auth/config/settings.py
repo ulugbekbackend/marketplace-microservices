@@ -30,6 +30,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "py_common.web.django.correlation_id_middleware",
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -132,6 +133,13 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 USE_TZ = True
 TIME_ZONE = "UTC"
 LANGUAGE_CODE = "en-us"
-STATIC_URL = "static/"
+# The gateway forwards /api/auth only, so the admin's assets live under it. WhiteNoise serves
+# the files collectstatic gathers into the image; there is no separate web server.
+STATIC_URL = "/api/auth/static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
+}
 
 configure_logging(SERVICE_NAME, level=config("LOG_LEVEL", default="INFO"))

@@ -34,6 +34,8 @@ services:
     volumes:
       - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
       - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+      # Operator panel logins, written by `make keys` from OPS_USER / OPS_PASSWORD.
+      - ./secrets/ops.htpasswd:/etc/traefik/ops.htpasswd:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks: [edge]
     restart: unless-stopped
@@ -46,6 +48,7 @@ services:
       - traefik.enable=true
       - traefik.http.routers.dashboard.rule=Host(`traefik.localhost`)
       - traefik.http.routers.dashboard.service=api@internal
+      - traefik.http.routers.dashboard.middlewares=ops-auth@file
 
   postgres:
     image: postgres:16.15-alpine
@@ -187,6 +190,7 @@ services:
     labels:
       - traefik.enable=true
       - traefik.http.routers.prometheus.rule=Host(`prometheus.localhost`)
+      - traefik.http.routers.prometheus.middlewares=ops-auth@file
       - traefik.http.services.prometheus.loadbalancer.server.port=9090
 
   grafana:
@@ -196,7 +200,8 @@ services:
       prometheus: {condition: service_healthy}
     environment:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
-      # Local stack: dashboards are readable without logging in, editing needs the admin.
+      # Behind the gateway's operator login dashboards are readable without a Grafana login;
+      # editing needs the Grafana admin.
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
       GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/marketplace.json
@@ -214,6 +219,7 @@ services:
     labels:
       - traefik.enable=true
       - traefik.http.routers.grafana.rule=Host(`grafana.localhost`)
+      - traefik.http.routers.grafana.middlewares=ops-auth@file
       - traefik.http.services.grafana.loadbalancer.server.port=3000
 
   mailpit:

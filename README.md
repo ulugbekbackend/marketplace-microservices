@@ -88,11 +88,16 @@ make ps                 # every service should report healthy
 | `http://shop.localhost` | the shop |
 | `http://seller.localhost` | the seller cabinet |
 | `http://api.localhost/api/<service>/health/live` | service liveness through the gateway |
-| `http://traefik.localhost` | routing dashboard |
-| `http://rabbit.localhost` | broker management |
+| `http://traefik.localhost` | routing dashboard (operator login) |
+| `http://rabbit.localhost` | broker management (RabbitMQ login) |
 | `http://s3.localhost` | object storage (S3 API) |
 | `http://mail.localhost` | captured outgoing email |
-| `http://grafana.localhost` | dashboards (`make up-full`) |
+| `http://grafana.localhost` | dashboards (`make up-full`, operator login) |
+| `http://prometheus.localhost` | metrics (`make up-full`, operator login) |
+
+The operator login is `OPS_USER` / `OPS_PASSWORD` from `.env`; `make keys` (run by `make up`) turns it
+into the gateway's password file. RabbitMQ keeps its own login, and the S3 API answers only signed
+requests and public image downloads.
 
 With `DEBUG=True` the login code is always `000000` and a test payment method is offered.
 

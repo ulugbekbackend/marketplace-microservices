@@ -22,7 +22,10 @@ export function onSessionExpired(listener: SessionListener): () => void {
 }
 
 export const apiClient = createApiClient({
-  baseUrl: import.meta.env.VITE_API_URL || DEFAULT_API_URL,
+  // The Vite dev server proxies /api to the gateway, so it talks to its own origin.
+  baseUrl:
+    import.meta.env.VITE_API_URL ||
+    (import.meta.env.DEV ? window.location.origin : DEFAULT_API_URL),
   onSessionExpired: () => {
     queryClient.removeQueries({ queryKey: queryKeys.me })
     queryClient.removeQueries({ queryKey: queryKeys.favorites })
