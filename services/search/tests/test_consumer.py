@@ -110,7 +110,7 @@ async def test_duplicate_event_is_handled_once(
     assert calls == 1
 
 
-async def test_product_deleted_removes_the_document(
+async def test_product_deleted_leaves_a_tombstone(
     handler: ProductEventHandler, index: ProductIndex
 ) -> None:
     await index.ensure()
@@ -120,7 +120,10 @@ async def test_product_deleted_removes_the_document(
     assert await handler(deleted(product.product_id, BASE_TIME + timedelta(seconds=1))) is (
         Outcome.HANDLED
     )
-    assert await source_of(index, product.product_id) is None
+    assert await source_of(index, product.product_id) == {
+        "id": str(product.product_id),
+        "deleted": True,
+    }
 
 
 async def test_stale_delete_is_ignored(handler: ProductEventHandler, index: ProductIndex) -> None:

@@ -1,10 +1,11 @@
 """Index lifecycle and versioned writes."""
 
+import copy
 from datetime import timedelta
 from typing import Any
 
 import pytest
-from app.services.analysis import INDEX_MAPPINGS, REFRESH_INTERVAL
+from app.services.analysis import INDEX_MAPPINGS, REFRESH_INTERVAL, index_settings
 from app.services.index import (
     BulkLoadError,
     IndexMissingError,
@@ -26,6 +27,10 @@ async def get_source(index: ProductIndex, product_id: Any) -> dict[str, Any] | N
     return source
 
 
+def tombstone(product_id: Any) -> dict[str, Any]:
+    return {"id": str(product_id), "deleted": True}
+
+
 def test_document_matches_the_mapping() -> None:
     product = make_product(
         attributes=[("color", "Red"), ("color", "Red"), ("size", "M")],
@@ -34,7 +39,8 @@ def test_document_matches_the_mapping() -> None:
 
     document = to_document(product)
 
-    assert set(document) == set(INDEX_MAPPINGS["properties"])
+    # ``deleted`` is set on tombstones only.
+    assert set(document) == set(INDEX_MAPPINGS["properties"]) - {"deleted"}
     assert document["attributes"] == [
         {"code": "color", "value": "Red"},
         {"code": "size", "value": "M"},
@@ -159,13 +165,16 @@ async def test_delete_and_stale_delete(index: ProductIndex) -> None:
     assert await get_source(index, product.product_id) is not None
 
     assert await index.delete(product.product_id, version=3000) is True
-    assert await get_source(index, product.product_id) is None
+    assert await get_source(index, product.product_id) == tombstone(product.product_id)
 
 
 async def test_delete_of_unknown_product_is_fine(index: ProductIndex) -> None:
     await index.ensure()
+    product_id = make_product().product_id
 
-    assert await index.delete(make_product().product_id, version=1000) is True
+    assert await index.delete(product_id, version=1000) is True
+    # The tombstone keeps the version, so an older update of it cannot land later.
+    assert await get_source(index, product_id) == tombstone(product_id)
 
 
 async def test_update_older_than_a_delete_does_not_resurrect(index: ProductIndex) -> None:
@@ -175,7 +184,38 @@ async def test_update_older_than_a_delete_does_not_resurrect(index: ProductIndex
     await index.delete(product.product_id, version=3000)
 
     assert await index.upsert(product, version=2000) is False
-    assert await get_source(index, product.product_id) is None
+    assert await get_source(index, product.product_id) == tombstone(product.product_id)
+
+
+async def test_an_update_newer_than_the_delete_brings_the_product_back(
+    index: ProductIndex,
+) -> None:
+    await index.ensure()
+    product = make_product()
+    await index.delete(product.product_id, version=1000)
+
+    assert await index.upsert(product, version=2000) is True
+    source = await get_source(index, product.product_id)
+    assert source is not None and "deleted" not in source
+
+
+async def test_ensure_adds_new_fields_to_an_older_live_index(index: ProductIndex) -> None:
+    old_mapping = copy.deepcopy(INDEX_MAPPINGS)
+    del old_mapping["properties"]["deleted"]
+    del old_mapping["properties"]["category_path"]["fields"]["autocomplete"]
+    name = index.first_index_name()
+    await index.es.indices.create(
+        index=name,
+        settings=index_settings(shards=1, replicas=0),
+        mappings=old_mapping,
+        aliases={index.alias: {}},
+    )
+
+    assert await index.ensure() == name
+    product = make_product()
+    assert await index.delete(product.product_id, version=1000) is True  # strict mapping
+    mapping = (await index.es.indices.get_mapping(index=name)).body[name]["mappings"]
+    assert "autocomplete" in mapping["properties"]["category_path"]["fields"]
 
 
 async def test_writes_without_index_fail(index: ProductIndex) -> None:
