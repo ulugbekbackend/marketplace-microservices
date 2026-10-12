@@ -62,6 +62,7 @@ export type UserUpdateRequest = AuthSchemas['PatchedUserUpdateRequest']
 
 export type SellerApplication = AuthSchemas['SellerApplication']
 export type SellerApplicationStatus = AuthSchemas['StatusEnum']
+export type SellerBusinessType = AuthSchemas['BusinessTypeEnum']
 export type SellerApplyRequest = AuthSchemas['SellerApplyRequest']
 
 /** Error codes of the seller application endpoints (not part of the OpenAPI schema). */

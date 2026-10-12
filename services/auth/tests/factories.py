@@ -6,7 +6,7 @@ from factory.declarations import Sequence, SubFactory
 from factory.django import DjangoModelFactory
 from factory.faker import Faker
 
-from accounts.models import ApplicationStatus, Role, SellerApplication, User
+from accounts.models import ApplicationStatus, BusinessType, Role, SellerApplication, User
 
 
 class UserFactory(DjangoModelFactory[User]):
@@ -25,7 +25,8 @@ class SellerApplicationFactory(DjangoModelFactory[SellerApplication]):
 
     user = SubFactory(UserFactory)  # type: ignore[no-untyped-call]
     shop_name = Sequence(lambda n: f"Shop {n}")  # type: ignore[no-untyped-call]
-    inn = "123456789"
+    business_type = BusinessType.LLC
+    tax_id = "123456789"
     description = "Handmade goods"
     status = ApplicationStatus.PENDING
 

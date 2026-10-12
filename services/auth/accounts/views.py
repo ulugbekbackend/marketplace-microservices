@@ -228,7 +228,8 @@ class SellerApplyView(APIView):
         application = sellers.apply(
             _caller(request).user_id,
             shop_name=serializer.validated_data["shop_name"],
-            inn=serializer.validated_data["inn"],
+            business_type=serializer.validated_data["business_type"],
+            tax_id=serializer.validated_data["tax_id"],
             description=serializer.validated_data.get("description", ""),
         )
         return Response(

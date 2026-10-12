@@ -47,7 +47,8 @@ class Command(BaseCommand):
                     defaults={
                         "user": user,
                         "shop_name": seller.shop_name,
-                        "inn": seller.inn,
+                        "business_type": seller.business_type,
+                        "tax_id": seller.tax_id,
                         "description": seller.description,
                         "status": ApplicationStatus.APPROVED,
                         "reviewed_by": admin,

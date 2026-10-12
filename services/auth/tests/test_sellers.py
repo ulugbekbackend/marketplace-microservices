@@ -22,7 +22,13 @@ MINE = "/api/auth/seller/application/"
 ADMIN_LIST = "/api/auth/admin/seller-applications/"
 ClientFor = Callable[[User], APIClient]
 
-BODY = {"shop_name": "Silk Road", "inn": "123456789", "description": "Scarves"}
+BODY = {
+    "shop_name": "Silk Road",
+    "business_type": "llc",
+    "tax_id": "123456789",
+    "description": "Scarves",
+}
+PINFL = "31207880234561"
 
 
 def approve_url(application_id: UUID) -> str:
@@ -48,7 +54,7 @@ def test_customer_applies(client_for: ClientFor, customer: User) -> None:
 
 
 def test_description_is_optional(client_for: ClientFor, customer: User) -> None:
-    body = {"shop_name": "Silk Road", "inn": "123456789"}
+    body = {"shop_name": "Silk Road", "business_type": "llc", "tax_id": "123456789"}
 
     assert client_for(customer).post(APPLY, body, format="json").status_code == 201
 
@@ -80,10 +86,15 @@ def test_seller_cannot_apply(client_for: ClientFor, seller: User) -> None:
 @pytest.mark.parametrize(
     "body",
     [
-        {**BODY, "inn": "12345"},
-        {**BODY, "inn": "12345678a"},
+        {**BODY, "tax_id": "12345"},
+        {**BODY, "tax_id": "12345678a"},
+        {**BODY, "tax_id": "1234567890"},
+        {**BODY, "business_type": "llc", "tax_id": PINFL},
+        {**BODY, "business_type": "sole_proprietor", "tax_id": "123456789012"},
+        {**BODY, "business_type": "partnership"},
+        {key: value for key, value in BODY.items() if key != "business_type"},
         {**BODY, "shop_name": ""},
-        {"inn": "123456789"},
+        {"business_type": "llc", "tax_id": "123456789"},
     ],
 )
 def test_invalid_application_is_400(
@@ -93,6 +104,27 @@ def test_invalid_application_is_400(
 
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
+@pytest.mark.parametrize(
+    ("business_type", "tax_id"),
+    [
+        ("sole_proprietor", "123456789"),
+        ("sole_proprietor", PINFL),
+        ("self_employed", "123456789"),
+        ("self_employed", PINFL),
+    ],
+)
+def test_a_person_applies_with_stir_or_pinfl(
+    client_for: ClientFor, customer: User, business_type: str, tax_id: str
+) -> None:
+    body = {**BODY, "business_type": business_type, "tax_id": tax_id}
+
+    response = client_for(customer).post(APPLY, body, format="json")
+
+    assert response.status_code == 201
+    assert response.json()["business_type"] == business_type
+    assert response.json()["tax_id"] == tax_id
 
 
 def test_anonymous_cannot_apply(api: APIClient) -> None:
@@ -119,7 +151,9 @@ def test_concurrent_apply_maps_the_constraint_to_409(
     monkeypatch.setattr(SellerApplication.objects, "filter", blind_filter)
 
     with pytest.raises(ApiError) as caught:
-        sellers.apply(customer.id, shop_name="X", inn="123456789", description="")
+        sellers.apply(
+            customer.id, shop_name="X", business_type="llc", tax_id="123456789", description=""
+        )
     assert caught.value.error_code == "APPLICATION_PENDING"
 
 

@@ -238,7 +238,8 @@ const seller = {
 const application = (status: 'approved' | 'pending') => ({
   id: 'app-1',
   shop_name: "Marg'ilon atlas uyi",
-  inn: '305123456',
+  business_type: 'sole_proprietor',
+  tax_id: '305123456',
   description: 'Atlas va adras matolari, milliy kiyimlar.',
   status,
   reviewed_at: status === 'approved' ? at(20) : null,
@@ -421,6 +422,16 @@ const payouts = [
 const SHOTS: Shot[] = [
   { name: 'login', path: '/login' },
   { name: 'onboarding-form', path: '/onboarding', role: 'customer', application: 'none' },
+  {
+    name: 'onboarding-form-self-employed',
+    path: '/onboarding',
+    role: 'customer',
+    application: 'none',
+    prepare: async (page) => {
+      await page.getByRole('radio', { name: /O'zini o'zi band qilgan/ }).check()
+      await page.getByLabel('STIR yoki JShShIR').fill('31207880234561')
+    },
+  },
   { name: 'onboarding-pending', path: '/onboarding', role: 'customer', application: 'pending' },
   { name: 'dashboard', path: '/', role: 'seller' },
   { name: 'dashboard-empty', path: '/', role: 'seller', noSales: true },

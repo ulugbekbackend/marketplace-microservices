@@ -77,7 +77,8 @@ describe('seller application hooks', () => {
     const application = {
       id: 'a1',
       shop_name: 'Atlas uyi',
-      inn: '123456789',
+      business_type: 'self_employed',
+      tax_id: '31207880234561',
       description: '',
       status: 'pending',
       reviewed_at: null,
@@ -94,11 +95,13 @@ describe('seller application hooks', () => {
     await waitFor(() => expect(result.current.application.isSuccess).toBe(true))
     expect(result.current.application.data).toBeNull()
 
-    await act(() => result.current.apply.mutateAsync({ shop_name: 'Atlas uyi', inn: '123456789' }))
-    expect(server.callsTo('POST', '/api/auth/seller/apply/')[0]!.body).toEqual({
+    const body = {
       shop_name: 'Atlas uyi',
-      inn: '123456789',
-    })
+      business_type: 'self_employed',
+      tax_id: '31207880234561',
+    } as const
+    await act(() => result.current.apply.mutateAsync(body))
+    expect(server.callsTo('POST', '/api/auth/seller/apply/')[0]!.body).toEqual(body)
     expect(queryClient.getQueryData(queryKeys.sellerApplication)).toEqual(application)
   })
 

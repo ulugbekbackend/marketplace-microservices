@@ -7,13 +7,14 @@ import {
   useMe,
   useSellerApplication,
   type SellerApplication,
+  type SellerBusinessType,
 } from '@bozorcha/api-client'
 import { Button, Card, cn, Input, Skeleton, Spinner, Textarea } from '@bozorcha/ui'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useQueryClient } from '@tanstack/react-query'
-import { Check, CircleAlert, Clock, RotateCw, Store, XCircle } from 'lucide-react'
+import { Building2, Check, CircleAlert, Clock, RotateCw, Store, User, XCircle } from 'lucide-react'
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
-import { useForm } from 'react-hook-form'
+import { useForm, useWatch, type UseFormRegisterReturn } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { Navigate } from 'react-router'
 import { z } from 'zod'
@@ -24,13 +25,49 @@ import { formatDateTime } from '../lib/dates'
 const SHOP_NAME_MAX = 120
 const APPLICATION_DESCRIPTION_MAX = 2000
 
-const applySchema = z.object({
-  shop_name: z.string().trim().min(2, 'shopNameRequired').max(SHOP_NAME_MAX, 'shopNameTooLong'),
-  inn: z.string().regex(/^\d{9}$/, 'innInvalid'),
-  description: z.string().max(APPLICATION_DESCRIPTION_MAX, 'descriptionTooLong'),
-})
+const BUSINESS_TYPES = [
+  'llc',
+  'sole_proprietor',
+  'self_employed',
+] as const satisfies readonly SellerBusinessType[]
+const STIR = /^\d{9}$/
+const STIR_OR_PINFL = /^(\d{9}|\d{14})$/
+
+/** Until a type is picked the form asks for a STIR, the one id every type may use. */
+const isCompany = (type: SellerBusinessType | null | undefined) => !type || type === 'llc'
+
+// A company applies with its STIR; a sole proprietor or a self-employed person may also use
+// the 14 digit JShShIR (PINFL).
+const applySchema = z
+  .object({
+    shop_name: z.string().trim().min(2, 'shopNameRequired').max(SHOP_NAME_MAX, 'shopNameTooLong'),
+    business_type: z.enum(BUSINESS_TYPES).nullish(), // an untouched radio group is null
+    tax_id: z.string(),
+    description: z.string().max(APPLICATION_DESCRIPTION_MAX, 'descriptionTooLong'),
+  })
+  .superRefine(
+    (values, ctx) => {
+      if (!values.business_type) {
+        ctx.addIssue({ code: 'custom', path: ['business_type'], message: 'businessTypeRequired' })
+      }
+      const company = isCompany(values.business_type)
+      if (!(company ? STIR : STIR_OR_PINFL).test(values.tax_id)) {
+        const message = company ? 'stirInvalid' : 'taxIdInvalid'
+        ctx.addIssue({ code: 'custom', path: ['tax_id'], message })
+      }
+    },
+    // Run even when other fields fail, so that every error shows at once. The form always
+    // holds strings, so the values are safe to read.
+    { when: () => true },
+  )
 type ApplyValues = z.infer<typeof applySchema>
-type ApplyErrorKey = 'shopNameRequired' | 'shopNameTooLong' | 'innInvalid' | 'descriptionTooLong'
+type ApplyErrorKey =
+  | 'shopNameRequired'
+  | 'shopNameTooLong'
+  | 'businessTypeRequired'
+  | 'stirInvalid'
+  | 'taxIdInvalid'
+  | 'descriptionTooLong'
 type ApiErrorKey = 'network' | 'rejected' | 'unknown'
 
 /**
@@ -162,19 +199,28 @@ function ApplyForm({
   const queryClient = useQueryClient()
   const [apiError, setApiError] = useState<ApiErrorKey | null>(null)
   const errorId = useId()
-  const { register, handleSubmit, formState } = useForm<ApplyValues>({
+  const { control, register, handleSubmit, formState } = useForm<ApplyValues>({
     resolver: zodResolver(applySchema),
     defaultValues: {
       shop_name: previous?.shop_name ?? '',
-      inn: previous?.inn ?? '',
+      business_type: previous?.business_type,
+      tax_id: previous?.tax_id ?? '',
       description: previous?.description ?? '',
     },
   })
+  const businessType = useWatch({ control, name: 'business_type' })
+  const company = isCompany(businessType)
 
-  const onSubmit = handleSubmit((values) => {
+  const onSubmit = handleSubmit(({ business_type, ...values }) => {
+    if (!business_type) return // the schema has already reported it
     setApiError(null)
     apply.mutate(
-      { shop_name: values.shop_name.trim(), inn: values.inn, description: values.description },
+      {
+        shop_name: values.shop_name.trim(),
+        business_type,
+        tax_id: values.tax_id,
+        description: values.description,
+      },
       {
         onError: (error) => {
           if (isApiError(error) && error.code === 'APPLICATION_PENDING') {
@@ -216,13 +262,18 @@ function ApplyForm({
         autoComplete="organization"
         maxLength={SHOP_NAME_MAX}
       />
+      <BusinessTypeField
+        register={register('business_type')}
+        selected={businessType}
+        error={fieldError('business_type')}
+      />
       <Input
-        {...register('inn')}
-        label={t('onboarding.inn')}
-        hint={t('onboarding.innHint')}
-        error={fieldError('inn')}
+        {...register('tax_id')}
+        label={t(company ? 'onboarding.stir' : 'onboarding.taxId')}
+        hint={t(company ? 'onboarding.stirHint' : 'onboarding.taxIdHint')}
+        error={fieldError('tax_id')}
         inputMode="numeric"
-        maxLength={9}
+        maxLength={company ? 9 : 14}
         className="tabular"
       />
       <Textarea
@@ -256,14 +307,81 @@ function ApplyForm({
   )
 }
 
+function BusinessTypeField({
+  register,
+  selected,
+  error,
+}: {
+  register: UseFormRegisterReturn<'business_type'>
+  selected: SellerBusinessType | null | undefined
+  error: string | undefined
+}) {
+  const { t } = useTranslation()
+  const errorId = useId()
+  return (
+    <fieldset
+      className="flex flex-col gap-2"
+      aria-invalid={error ? true : undefined}
+      aria-describedby={error ? errorId : undefined}
+    >
+      <legend className="mb-1.5 text-sm font-medium text-text">
+        {t('onboarding.businessType')}
+      </legend>
+      <div className="flex flex-col gap-2">
+        {BUSINESS_TYPES.map((type) => {
+          const Icon = type === 'llc' ? Building2 : User
+          return (
+            <label
+              key={type}
+              className={cn(
+                'flex min-h-14 cursor-pointer items-start gap-3 rounded-lg border px-3 py-2.5 transition-colors duration-150 ease-out has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-primary',
+                selected === type
+                  ? 'border-primary bg-primary-soft text-text'
+                  : 'border-border bg-surface text-text hover:bg-surface-2',
+              )}
+            >
+              <input
+                {...register}
+                type="radio"
+                value={type}
+                className="mt-0.5 size-4 shrink-0 accent-primary"
+              />
+              <Icon
+                aria-hidden="true"
+                size={18}
+                strokeWidth={1.75}
+                className="mt-px shrink-0 text-text-muted"
+              />
+              <span className="flex min-w-0 flex-col text-sm font-semibold">
+                {t(`onboarding.businessTypes.${type}`)}
+                <span className="text-xs font-normal text-text-muted">
+                  {t(`onboarding.businessTypeHints.${type}`)}
+                </span>
+              </span>
+            </label>
+          )
+        })}
+      </div>
+      {error && (
+        <p id={errorId} className="text-sm text-danger-ink">
+          {error}
+        </p>
+      )}
+    </fieldset>
+  )
+}
+
 function Summary({ application }: { application: SellerApplication }) {
   const { t } = useTranslation()
+  const company = application.business_type === 'llc'
   return (
     <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 rounded-lg bg-surface-2 p-4 text-sm">
       <dt className="text-text-muted">{t('onboarding.shopName')}</dt>
       <dd className="font-semibold break-words text-text">{application.shop_name}</dd>
-      <dt className="text-text-muted">{t('onboarding.inn')}</dt>
-      <dd className="text-text tabular">{application.inn}</dd>
+      <dt className="text-text-muted">{t('onboarding.businessType')}</dt>
+      <dd className="text-text">{t(`onboarding.businessTypes.${application.business_type}`)}</dd>
+      <dt className="text-text-muted">{t(company ? 'onboarding.stir' : 'onboarding.taxId')}</dt>
+      <dd className="text-text tabular">{application.tax_id}</dd>
       <dt className="text-text-muted">{t('onboarding.sentAt')}</dt>
       <dd className="text-text tabular">{formatDateTime(application.created_at)}</dd>
     </dl>

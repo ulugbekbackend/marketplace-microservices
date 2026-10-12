@@ -233,18 +233,19 @@ export type webhooks = Record<string, never>
 export type components = {
   schemas: {
     AdminSellerApplication: {
+      readonly business_type: components['schemas']['BusinessTypeEnum']
       /** Format: date-time */
       readonly created_at: string
       readonly description: string
       /** Format: uuid */
       readonly id: string
-      readonly inn: string
       /** Format: date-time */
       readonly reviewed_at: string | null
       /** Format: uuid */
       readonly reviewed_by: string | null
       readonly shop_name: string
       readonly status: components['schemas']['StatusEnum']
+      readonly tax_id: string
       readonly user: components['schemas']['Applicant']
     }
     Applicant: {
@@ -253,6 +254,13 @@ export type components = {
       readonly id: string
       readonly phone: string
     }
+    /**
+     * @description * `llc` - Limited liability company (MChJ)
+     *     * `sole_proprietor` - Sole proprietor (YaTT)
+     *     * `self_employed` - Self-employed
+     * @enum {string}
+     */
+    BusinessTypeEnum: 'llc' | 'sole_proprietor' | 'self_employed'
     /** @description The shared error shape: {"error": {"code", "message", "details"}}. */
     Error: {
       error: components['schemas']['ErrorDetail']
@@ -310,21 +318,23 @@ export type components = {
      */
     RoleEnum: 'customer' | 'seller' | 'admin'
     SellerApplication: {
+      readonly business_type: components['schemas']['BusinessTypeEnum']
       /** Format: date-time */
       readonly created_at: string
       readonly description: string
       /** Format: uuid */
       readonly id: string
-      readonly inn: string
       /** Format: date-time */
       readonly reviewed_at: string | null
       readonly shop_name: string
       readonly status: components['schemas']['StatusEnum']
+      readonly tax_id: string
     }
     SellerApplyRequest: {
+      business_type: components['schemas']['BusinessTypeEnum']
       description?: string
-      inn: string
       shop_name: string
+      tax_id: string
     }
     /**
      * @description * `pending` - Pending

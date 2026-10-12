@@ -28,7 +28,8 @@ export const customerUser: User = { ...sellerUser, role: 'customer' }
 export const application = (patch: Partial<SellerApplication> = {}): SellerApplication => ({
   id: 'a1',
   shop_name: "Marg'ilon atlas",
-  inn: '123456789',
+  business_type: 'llc',
+  tax_id: '123456789',
   description: '',
   status: 'approved',
   reviewed_at: '2026-09-02T09:00:00Z',

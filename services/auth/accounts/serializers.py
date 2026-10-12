@@ -4,7 +4,7 @@ from typing import Any, ClassVar
 
 from rest_framework import serializers
 
-from accounts.models import ApplicationStatus, SellerApplication, User
+from accounts.models import ApplicationStatus, SellerApplication, User, tax_id_matches
 
 
 class UserSerializer(serializers.ModelSerializer[User]):
@@ -53,14 +53,32 @@ class LoginSerializer(TokenPairSerializer):
 class SellerApplySerializer(serializers.ModelSerializer[SellerApplication]):
     class Meta:
         model = SellerApplication
-        fields = ("shop_name", "inn", "description")
-        extra_kwargs: ClassVar[dict[str, dict[str, Any]]] = {"description": {"required": False}}
+        fields = ("shop_name", "business_type", "tax_id", "description")
+        extra_kwargs: ClassVar[dict[str, dict[str, Any]]] = {
+            "business_type": {"required": True},
+            "description": {"required": False},
+        }
+
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        if not tax_id_matches(attrs["business_type"], attrs["tax_id"]):
+            message = "A company applies with its 9 digit STIR."
+            raise serializers.ValidationError({"tax_id": message})
+        return attrs
 
 
 class SellerApplicationSerializer(serializers.ModelSerializer[SellerApplication]):
     class Meta:
         model = SellerApplication
-        fields = ("id", "shop_name", "inn", "description", "status", "reviewed_at", "created_at")
+        fields = (
+            "id",
+            "shop_name",
+            "business_type",
+            "tax_id",
+            "description",
+            "status",
+            "reviewed_at",
+            "created_at",
+        )
         read_only_fields = fields
 
 
@@ -81,7 +99,8 @@ class AdminSellerApplicationSerializer(serializers.ModelSerializer[SellerApplica
             "id",
             "user",
             "shop_name",
-            "inn",
+            "business_type",
+            "tax_id",
             "description",
             "status",
             "reviewed_by",

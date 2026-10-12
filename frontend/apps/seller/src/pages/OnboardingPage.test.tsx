@@ -40,10 +40,12 @@ describe('role routing and onboarding', () => {
 
     await u.click(screen.getByRole('button', { name: 'Ariza yuborish' }))
     expect(await screen.findByText(/kamida 2 ta belgi/)).toBeInTheDocument()
+    expect(screen.getByText('Faoliyat shaklini tanlang')).toBeInTheDocument()
     expect(screen.getByText("STIR 9 ta raqamdan iborat bo'lishi kerak")).toBeInTheDocument()
     expect(callsTo('POST', '/api/auth/seller/apply/')).toHaveLength(0)
 
     await u.type(screen.getByLabelText("Do'kon nomi"), 'Atlas uyi')
+    await u.click(screen.getByRole('radio', { name: /MChJ/ }))
     await u.type(screen.getByLabelText('STIR (INN)'), '123456789')
     await u.click(screen.getByRole('button', { name: 'Ariza yuborish' }))
 
@@ -53,8 +55,41 @@ describe('role routing and onboarding', () => {
     const [, init] = callsTo('POST', '/api/auth/seller/apply/')[0]!
     expect(JSON.parse(String(init!.body))).toEqual({
       shop_name: 'Atlas uyi',
-      inn: '123456789',
+      business_type: 'llc',
+      tax_id: '123456789',
       description: '',
+    })
+  })
+
+  it('lets a self-employed person apply with a JShShIR, but not a company', async () => {
+    const u = userEvent.setup()
+    const { callsTo } = setup({
+      'GET /api/auth/me/': () => json(200, customerUser),
+      'GET /api/auth/seller/application/': () => apiError(404, 'NOT_FOUND'),
+      'POST /api/auth/seller/apply/': (body) =>
+        json(201, application({ ...(body as object), status: 'pending', reviewed_at: null })),
+    })
+    await u.type(await screen.findByLabelText("Do'kon nomi"), 'Atlas uyi')
+    await u.click(screen.getByRole('radio', { name: /MChJ/ }))
+    await u.type(screen.getByLabelText('STIR (INN)'), '31207')
+    await u.click(screen.getByRole('button', { name: 'Ariza yuborish' }))
+    expect(await screen.findByText("STIR 9 ta raqamdan iborat bo'lishi kerak")).toBeInTheDocument()
+    expect(callsTo('POST', '/api/auth/seller/apply/')).toHaveLength(0)
+
+    await u.click(screen.getByRole('radio', { name: /O'zini o'zi band qilgan/ }))
+    const taxId = screen.getByLabelText('STIR yoki JShShIR')
+    await u.clear(taxId)
+    await u.type(taxId, '31207880234561')
+    await u.click(screen.getByRole('button', { name: 'Ariza yuborish' }))
+
+    expect(
+      await screen.findByRole('heading', { name: "Ariza ko'rib chiqilmoqda" }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('31207880234561')).toBeInTheDocument()
+    const [, init] = callsTo('POST', '/api/auth/seller/apply/')[0]!
+    expect(JSON.parse(String(init!.body))).toMatchObject({
+      business_type: 'self_employed',
+      tax_id: '31207880234561',
     })
   })
 
@@ -67,6 +102,7 @@ describe('role routing and onboarding', () => {
     expect(await screen.findByRole('heading', { name: 'Ariza rad etildi' })).toBeInTheDocument()
     await u.click(screen.getByRole('button', { name: 'Qayta topshirish' }))
     expect(screen.getByLabelText("Do'kon nomi")).toHaveValue("Marg'ilon atlas")
+    expect(screen.getByRole('radio', { name: /MChJ/ })).toBeChecked()
     expect(screen.getByLabelText('STIR (INN)')).toHaveValue('123456789')
   })
 

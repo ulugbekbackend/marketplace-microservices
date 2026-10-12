@@ -25,7 +25,9 @@ def _get_user(user_id: UUID, *, lock: bool = False) -> User:
     return user
 
 
-def apply(user_id: UUID, *, shop_name: str, inn: str, description: str) -> SellerApplication:
+def apply(
+    user_id: UUID, *, shop_name: str, business_type: str, tax_id: str, description: str
+) -> SellerApplication:
     with transaction.atomic():
         user = _get_user(user_id, lock=True)
         if user.role != Role.CUSTOMER:
@@ -35,7 +37,11 @@ def apply(user_id: UUID, *, shop_name: str, inn: str, description: str) -> Selle
         try:
             with transaction.atomic():
                 return SellerApplication.objects.create(
-                    user=user, shop_name=shop_name, inn=inn, description=description
+                    user=user,
+                    shop_name=shop_name,
+                    business_type=business_type,
+                    tax_id=tax_id,
+                    description=description,
                 )
         except IntegrityError as exc:  # the partial unique index caught a concurrent apply
             raise _pending_error() from exc

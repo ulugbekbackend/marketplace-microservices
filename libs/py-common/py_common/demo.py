@@ -24,8 +24,10 @@ class DemoSeller:
     phone: str
     full_name: str
     shop_name: str
-    inn: str
+    tax_id: str
     description: str
+    #: The auth service's ``BusinessType`` value: llc, sole_proprietor or self_employed.
+    business_type: str = "llc"
 
     @property
     def user_id(self) -> UUID:
@@ -61,15 +63,17 @@ SELLERS: tuple[DemoSeller, ...] = (
         "+998901110004",
         "Malika Yusupova",
         "Uy Bozori",
-        "301234564",
+        "42305901234567",
         "Uy-ro'zg'or buyumlari va oshxona jihozlari",
+        "sole_proprietor",
     ),
     DemoSeller(
         "+998901110005",
         "Bekzod Toshmatov",
         "Sport Olami",
-        "301234565",
+        "31207880234561",
         "Sport kiyimlari va jihozlari",
+        "self_employed",
     ),
 )
 

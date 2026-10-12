@@ -110,14 +110,29 @@ class ApplicationStatus(models.TextChoices):
     REJECTED = "rejected", "Rejected"
 
 
+class BusinessType(models.TextChoices):
+    LLC = "llc", "Limited liability company (MChJ)"
+    SOLE_PROPRIETOR = "sole_proprietor", "Sole proprietor (YaTT)"
+    SELF_EMPLOYED = "self_employed", "Self-employed"
+
+
+#: STIR (INN) has 9 digits, JShShIR (PINFL) has 14.
+validate_tax_id = RegexValidator(r"^(\d{9}|\d{14})$", "Tax id must be 9 or 14 digits.")
+
+
+def tax_id_matches(business_type: str, tax_id: str) -> bool:
+    """A company is identified by its STIR only; a person may use either STIR or JShShIR."""
+    return business_type != BusinessType.LLC or len(tax_id) == 9
+
+
 class SellerApplication(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid7, editable=False)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="seller_applications")
     shop_name = models.CharField(max_length=120)
-    inn = models.CharField(
-        max_length=9,
-        validators=[RegexValidator(r"^\d{9}$", "INN must be exactly 9 digits.")],
+    business_type = models.CharField(
+        max_length=16, choices=BusinessType.choices, default=BusinessType.LLC
     )
+    tax_id = models.CharField(max_length=14, validators=[validate_tax_id])
     description = models.TextField(blank=True)
     status = models.CharField(
         max_length=16, choices=ApplicationStatus.choices, default=ApplicationStatus.PENDING

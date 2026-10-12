@@ -28,9 +28,9 @@ class UserAdmin(UserModelAdmin):
 class SellerApplicationAdmin(ApplicationModelAdmin):
     """Reviews go through the API, which also writes the outbox event."""
 
-    list_display = ("shop_name", "user", "status", "created_at", "reviewed_at")
-    list_filter = ("status",)
-    search_fields = ("shop_name", "inn", "user__phone")
+    list_display = ("shop_name", "business_type", "user", "status", "created_at", "reviewed_at")
+    list_filter = ("status", "business_type")
+    search_fields = ("shop_name", "tax_id", "user__phone")
 
     def has_change_permission(self, request: HttpRequest, obj: object = None) -> bool:
         return False
