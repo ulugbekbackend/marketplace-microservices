@@ -37,7 +37,7 @@ assets/readme/   the images the README shows
 - Services never touch another service's DB. Events via `marketplace.events` topic exchange + outbox.
 - Error format: `{"error": {"code", "message", "details"}}`. Pagination: `{items, total, page, page_size}`.
 - Python deps: `uv`, env via `decouple.config()`; Django settings in single `config/settings.py`.
-- Commits: Conventional Commits, no AI attribution; work on `feature/*` branches, never push to main.
+- Commits: Conventional Commits, no AI attribution; all work happens on the `dev` branch, never push to main.
 
 ## Repo scope
 Only the app and what production needs is committed, together with the agent definitions
