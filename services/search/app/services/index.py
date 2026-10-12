@@ -8,6 +8,12 @@
 Writes use external versioning (``version_type=external_gte``): the version of a document
 is the time of the change in epoch milliseconds, so an older event arriving late is a
 no-op instead of overwriting newer data.
+
+A deleted product stays as a tombstone (``{"id", "deleted": true}`` at the version of the
+delete) instead of being removed: Elasticsearch forgets the version of a removed document
+after ``index.gc_deletes`` (60 s), and an older update arriving later would bring the
+product back. Searches leave tombstones out (``query.NOT_DELETED``); a reindex carries
+them over.
 """
 
 import logging
@@ -17,7 +23,7 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
-from elasticsearch import AsyncElasticsearch, BadRequestError, ConflictError, NotFoundError
+from elasticsearch import AsyncElasticsearch, BadRequestError, ConflictError
 
 from app.services.analysis import INDEX_MAPPINGS, REFRESH_INTERVAL, index_settings
 from contracts.events import ProductUpdated
@@ -123,9 +129,11 @@ class ProductIndex:
             await self.es.indices.update_aliases(actions=actions)
 
     async def ensure(self) -> str:
-        """Create ``<alias>_v1`` behind the alias when no index serves it yet."""
+        """Create ``<alias>_v1`` behind the alias when no index serves it yet, or bring the
+        live index's mapping up to date."""
         targets = await self.targets()
         if targets.live:
+            await self.upgrade_mapping(targets.all)
             return targets.live[0]
         name = self.first_index_name()
         if await self.es.indices.exists(index=name):
@@ -140,6 +148,16 @@ class ProductIndex:
             return name
         logger.info("search index created", extra={"index": name, "alias": self.alias})
         return name
+
+    async def upgrade_mapping(self, indices: list[str]) -> None:
+        """Add fields (and sub-fields) this version maps but an older index lacks.
+
+        Documents written before get the new sub-fields only when they are written again,
+        so a mapping change still wants a reindex; new writes work at once.
+        """
+        await self.es.indices.put_mapping(
+            index=",".join(indices), properties=INDEX_MAPPINGS["properties"]
+        )
 
     async def targets(self) -> WriteTargets:
         """Concrete indices behind the live and the pending alias."""
@@ -191,16 +209,18 @@ class ProductIndex:
         return written
 
     async def delete(self, product_id: UUID, *, version: int) -> bool:
-        """Remove the product. Returns False when a newer version is already indexed."""
+        """Replace the product with a tombstone. Returns False when a newer version is
+        already indexed."""
         applied = False
         for target in await self._write_targets():
             try:
-                await self.es.delete(
-                    index=target, id=str(product_id), version=version, version_type=VERSION_TYPE
+                await self.es.index(
+                    index=target,
+                    id=str(product_id),
+                    document={"id": str(product_id), "deleted": True},
+                    version=version,
+                    version_type=VERSION_TYPE,
                 )
-                applied = True
-            except NotFoundError:
-                # Never indexed, or already gone: the tombstone still records the version.
                 applied = True
             except ConflictError:
                 logger.info(
@@ -243,6 +263,26 @@ class ProductIndex:
         if failures:
             raise BulkLoadError(f"{len(failures)} documents rejected: {failures[0].get('error')}")
         return stats
+
+    async def copy_tombstones(self, index: str) -> int:
+        """Copy the live index's tombstones, with their versions, into ``index``.
+
+        A product the catalog still listed when it was read but deleted meanwhile keeps its
+        newer tombstone; one that came back after its delete keeps the newer document.
+        """
+        live = (await self.targets()).live
+        if not live:
+            return 0
+        # _reindex reads through search: a delete of the last second must be visible.
+        await self.es.indices.refresh(index=live[0])
+        response = await self.es.reindex(
+            source={"index": live[0], "query": {"term": {"deleted": True}}},
+            dest={"index": index, "version_type": "external"},
+            conflicts="proceed",
+            wait_for_completion=True,
+        )
+        created: int = response.body.get("created", 0)
+        return created
 
     async def finish_bulk(self, index: str) -> None:
         await self.es.indices.put_settings(

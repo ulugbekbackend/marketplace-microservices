@@ -18,6 +18,9 @@ FACET_ATTRIBUTE_CODES = 30
 FACET_ATTRIBUTE_VALUES = 50
 SUGGEST_LIMIT = 8
 
+#: Filter clause that leaves the tombstones of deleted products out of every search.
+NOT_DELETED: dict[str, Any] = {"bool": {"must_not": [{"term": {"deleted": True}}]}}
+
 #: Price facet buckets on the card price (``min_price``) in tiyin; ``to`` is exclusive.
 PRICE_RANGES: tuple[tuple[str, int | None, int | None], ...] = (
     ("lt_100k", None, 10_000_000),
@@ -100,8 +103,16 @@ def text_query(q: str) -> dict[str, Any]:
                         "operator": "and",
                     }
                 },
-                # Unfinished last word ("telef").
-                {"match": {"title.autocomplete": {"query": text, "operator": "and"}}},
+                # Unfinished last word ("telef"), or a word that starts a title or category
+                # word ("telefon" -> "Telefonlar").
+                {
+                    "multi_match": {
+                        "query": text,
+                        "fields": ["title.autocomplete", "category_path.autocomplete"],
+                        "type": "cross_fields",
+                        "operator": "and",
+                    }
+                },
                 {"match_phrase": {"title": {"query": text, "boost": 2}}},
             ],
             "minimum_should_match": 1,
@@ -158,7 +169,7 @@ def selected_codes(params: SearchParams) -> list[str]:
 
 def build_search(params: SearchParams, *, alias: str) -> dict[str, Any]:
     """Keyword arguments for ``AsyncElasticsearch.search``."""
-    base_filters: list[dict[str, Any]] = []
+    base_filters: list[dict[str, Any]] = [NOT_DELETED]
     if params.seller is not None:
         base_filters.append({"term": {"seller_id": str(params.seller)}})
     if params.in_stock is not None:
@@ -269,6 +280,7 @@ def build_suggest(q: str, *, alias: str, limit: int = SUGGEST_LIMIT) -> dict[str
             "bool": {
                 "must": [{"match": {"title.autocomplete": {"query": q, "operator": "and"}}}],
                 "should": [{"match": {"title": {"query": q, "boost": 2}}}],
+                "filter": [NOT_DELETED],
             }
         },
         "sort": ["_score", {"rating": "desc"}, {"id": "asc"}],

@@ -1,5 +1,6 @@
 """Every product change leaves exactly one outbox row, in the same transaction."""
 
+import time
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -26,6 +27,7 @@ from products import services
 from products.documents import build_product_document
 from products.models import AttributeValue, Category, ImageStatus
 from py_common.outbox import publish_pending
+from py_common.outbox_notify import NotifyWaiter, django_conninfo
 from sellers.models import Seller
 from tests.factories import make_image, make_product, make_variant
 
@@ -239,3 +241,44 @@ def test_store_publishes_pending_rows_once() -> None:
     assert [e.event_id for e in publisher.sent] == [first.event_id, second.event_id]
     assert publisher.sent[0].producer == "catalog"
     assert not Outbox.objects.filter(published_at__isnull=True).exists()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_a_committed_outbox_row_wakes_the_listening_relay() -> None:
+    waiter = NotifyWaiter(django_conninfo())
+    try:
+        assert not waiter.wait(0.05)  # listening now, nothing pending
+
+        with transaction.atomic():
+            add_to_outbox(_event())
+            add_to_outbox(_event())
+        started = time.monotonic()
+
+        assert waiter.wait(5)
+        assert time.monotonic() - started < 1
+        # Two rows, one commit: one wake-up.
+        assert not waiter.wait(0.05)
+    finally:
+        waiter.close()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_a_rolled_back_outbox_row_does_not_wake_the_relay() -> None:
+    waiter = NotifyWaiter(django_conninfo())
+    try:
+        waiter.wait(0)
+        with pytest.raises(RuntimeError), transaction.atomic():
+            add_to_outbox(_event())
+            raise RuntimeError("business rule failed")
+
+        assert not waiter.wait(0.2)
+    finally:
+        waiter.close()
+
+
+def test_the_waiter_sleeps_out_the_timeout_when_postgres_is_down() -> None:
+    waiter = NotifyWaiter("host=127.0.0.1 port=9 connect_timeout=1")
+    started = time.monotonic()
+
+    assert not waiter.wait(0.1)
+    assert time.monotonic() - started >= 0.1

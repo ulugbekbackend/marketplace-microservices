@@ -148,14 +148,15 @@ wait for the reservation, pay):
 | Rule | Result |
 |---|---|
 | exactly 10 orders PAID | 10 |
-| everyone else cancelled or refused at checkout | 14 cancelled + 76 refused |
+| everyone else cancelled or refused at checkout | 8 cancelled + 82 refused |
 | stock / reserved afterwards | 0 / 0 |
 | 5xx responses | 0 |
 
-Latency is the honest weak spot: checkout p95 is ~9 s at this burst because the order
-service checks out synchronously (cart and catalog calls) on three gunicorn workers and the
-gateway verifies every token with auth. Correctness holds; throughput would come from more
-workers or an asynchronous checkout response.
+Request p95 is ~3 s at this burst (checkout p50 ~1.7 s) on one laptop running the whole
+stack. Django services run three gunicorn workers with four threads each, as requests mostly
+wait on other services, and outbox relays wake on Postgres `NOTIFY` instead of polling, so
+an event reaches the broker in tens of milliseconds. A checkout spends ~0.3 s in the order
+service; the rest is queueing for CPU, which more replicas would remove.
 
 CI (GitHub Actions) runs lint, the unit suites, mypy and the frontend for the parts a
 change touched. System, e2e and load tests need the whole stack and run locally.
@@ -195,7 +196,9 @@ errors by provider and code (`payment_errors_total`), search latency percentiles
 - **Outbox.** The business change and its event row commit together; a relay publishes with
   publisher confirms and marks rows only after the broker confirmed them
   ([`publish_pending`](libs/py-common/py_common/outbox.py#L37)), so a crash duplicates an
-  event but never loses one.
+  event but never loses one. The commit `NOTIFY`s the relay
+  ([`NotifyWaiter`](libs/py-common/py_common/outbox_notify.py#L21)); its poll interval only
+  bounds the wait if a notification is lost.
 - **Idempotency.** Consumers record `event_id` with the change
   ([`EventRouter.dispatch`](libs/py-common/py_common/consumer.py#L47)); checkout replays an
   `Idempotency-Key` ([`run_once`](services/order/orders/idempotency.py#L63)); Payme and Click
@@ -208,8 +211,11 @@ errors by provider and code (`payment_errors_total`), search latency percentiles
   ([`apply_payment`](services/order/orders/saga.py#L185),
   [`on_stock_failed`](services/order/orders/saga.py#L153)).
 - **Search sync.** Product events are applied with the event time as an external version
-  ([`ProductIndex.upsert`](services/search/app/services/index.py#L172)), so an old event
-  arriving late cannot overwrite newer data; a full reindex swaps an alias.
+  ([`ProductIndex.upsert`](services/search/app/services/index.py#L190)), so an old event
+  arriving late cannot overwrite newer data. A deleted product leaves a versioned tombstone
+  rather than disappearing, so even a much later update cannot bring it back. A full reindex
+  runs in the background (`POST`/`GET /internal/search/reindex`, or `make reindex`), carries
+  the tombstones over and swaps an alias.
 
 ## Development
 

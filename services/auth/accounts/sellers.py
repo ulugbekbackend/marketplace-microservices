@@ -6,11 +6,12 @@ so the event exists if and only if the promotion committed.
 
 from uuid import UUID
 
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
 from django.utils import timezone
 
 from accounts.models import ApplicationStatus, Outbox, Role, SellerApplication, User
 from contracts.events import EventEnvelope, SellerApproved, build_event
+from py_common.outbox_notify import NOTIFY_SQL
 from py_common.web.drf import ApiError
 
 PRODUCER = "auth"
@@ -66,12 +67,16 @@ def _lock_pending(application_id: UUID) -> SellerApplication:
 
 def write_event(envelope: EventEnvelope) -> Outbox:
     """Store an event for the publisher; must run inside the business transaction."""
-    return Outbox.objects.create(
+    row = Outbox.objects.create(
         event_id=envelope.event_id,
         event_type=envelope.event_type.value,
         payload=envelope.model_dump(mode="json"),
         created_at=envelope.occurred_at,
     )
+    # Wakes the relay at commit.
+    with connection.cursor() as cursor:
+        cursor.execute(NOTIFY_SQL)
+    return row
 
 
 def approve(application_id: UUID, *, reviewer_id: UUID) -> SellerApplication:

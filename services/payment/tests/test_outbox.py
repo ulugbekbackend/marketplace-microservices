@@ -103,6 +103,39 @@ async def test_relay_publishes_in_the_background(
     assert len(publisher.published) == 2
 
 
+async def test_a_commit_with_outbox_rows_wakes_the_idle_relay(
+    sessions: async_sessionmaker[AsyncSession],
+) -> None:
+    publisher = RecordingPublisher()
+    relay = OutboxRelay(sessions, publisher, interval=30)
+    relay.start()
+    try:
+        await asyncio.sleep(0.05)  # the first, empty batch is done: the relay is waiting
+        await stage(sessions, 1)
+        for _ in range(100):
+            if publisher.published:
+                break
+            await asyncio.sleep(0.01)
+    finally:
+        await relay.stop()
+
+    assert len(publisher.published) == 1
+
+
+async def test_a_rolled_back_transaction_does_not_wake_the_relay(
+    sessions: async_sessionmaker[AsyncSession],
+) -> None:
+    relay = OutboxRelay(sessions, RecordingPublisher(), interval=30)
+    relay.start()
+    try:
+        async with sessions() as session:
+            add_event(session, paid())
+            await session.rollback()
+        assert not relay._woken.is_set()
+    finally:
+        await relay.stop()
+
+
 async def test_relay_keeps_going_after_database_errors(
     sessions: async_sessionmaker[AsyncSession],
 ) -> None:

@@ -4,6 +4,7 @@ from typing import Any
 from uuid import uuid4
 
 from app.services.query import (
+    NOT_DELETED,
     PRICE_RANGES,
     SearchParams,
     Sort,
@@ -25,6 +26,7 @@ def test_non_facet_filters_go_into_the_query() -> None:
     body = build_search(SearchParams(seller=seller, in_stock=False), alias="products")
 
     assert body["query"]["bool"]["filter"] == [
+        NOT_DELETED,
         {"term": {"seller_id": str(seller)}},
         {"term": {"in_stock": False}},
     ]

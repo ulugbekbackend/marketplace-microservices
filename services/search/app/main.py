@@ -125,6 +125,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             await bootstrap
         if runner is not None:
             await runner.stop()
+        await app.state.reindexer.aclose()
         await http.aclose()
         await redis.aclose()
         await es.close()

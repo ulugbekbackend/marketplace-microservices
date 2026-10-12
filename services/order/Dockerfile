@@ -18,7 +18,8 @@ FROM python:3.12.14-slim-bookworm
 ENV PATH=/opt/venv/bin:$PATH \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    DJANGO_SETTINGS_MODULE=config.settings
+    DJANGO_SETTINGS_MODULE=config.settings \
+    WEB_CONCURRENCY=3
 
 RUN useradd --create-home --uid 10001 app
 COPY --from=builder /opt/venv /opt/venv
@@ -33,4 +34,4 @@ HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=5 \
 
 # Several gunicorn workers: their Prometheus counters go to a shared directory, emptied at
 # start. Set here only, so the relay and consumer processes of this image stay single-process.
-CMD ["sh", "-c", "python manage.py migrate --noinput && export PROMETHEUS_MULTIPROC_DIR=/tmp/prometheus && rm -rf \"$PROMETHEUS_MULTIPROC_DIR\" && mkdir -p \"$PROMETHEUS_MULTIPROC_DIR\" && exec gunicorn -c python:py_common.web.gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3 --access-logfile -"]
+CMD ["sh", "-c", "python manage.py migrate --noinput && export PROMETHEUS_MULTIPROC_DIR=/tmp/prometheus && rm -rf \"$PROMETHEUS_MULTIPROC_DIR\" && mkdir -p \"$PROMETHEUS_MULTIPROC_DIR\" && exec gunicorn -c python:py_common.web.gunicorn config.wsgi:application --bind 0.0.0.0:8000 --access-logfile -"]

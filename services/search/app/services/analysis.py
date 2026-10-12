@@ -163,7 +163,18 @@ INDEX_MAPPINGS: dict[str, Any] = {
         ),
         "description": _text(),
         "category_ids": {"type": "keyword"},
-        "category_path": _text(fields={"raw": {"type": "keyword"}}),
+        # Category names are plural ("Telefonlar") while a query is usually singular
+        # ("telefon"): the prefix sub-field lets a word match the start of a category word.
+        "category_path": _text(
+            fields={
+                "raw": {"type": "keyword"},
+                "autocomplete": {
+                    "type": "text",
+                    "analyzer": "uz_autocomplete",
+                    "search_analyzer": "uz_text",
+                },
+            }
+        ),
         "seller_id": {"type": "keyword"},
         "shop_name": _text(fields={"raw": {"type": "keyword"}}),
         "slug": {"type": "keyword"},
@@ -184,5 +195,7 @@ INDEX_MAPPINGS: dict[str, Any] = {
         "image_url": {"type": "keyword", "index": False},
         "created_at": {"type": "date"},
         "updated_at": {"type": "date"},
+        # Set on tombstones of deleted products only.
+        "deleted": {"type": "boolean"},
     },
 }
